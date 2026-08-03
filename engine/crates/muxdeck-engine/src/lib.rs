@@ -13,6 +13,7 @@ pub mod dispatch;
 pub mod engine;
 pub mod error;
 pub mod identity;
+pub mod input_dispatch;
 pub mod pairing;
 pub mod registry;
 pub mod secret_file;

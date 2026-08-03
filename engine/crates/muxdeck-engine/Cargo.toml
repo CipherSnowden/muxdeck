@@ -34,3 +34,4 @@ tracing = "0.1.44"
 [dev-dependencies]
 rustls = { version = "0.23.43", features = ["ring"] }
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
+muxdeck-input = { workspace = true, features = ["mock"] }

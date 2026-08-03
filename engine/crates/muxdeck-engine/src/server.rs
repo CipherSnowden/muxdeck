@@ -26,6 +26,7 @@ use tracing::{debug, info, warn};
 use crate::dispatch::authorize;
 use crate::engine::Engine;
 use crate::error::{EngineError, Result};
+use crate::input_dispatch;
 use crate::pairing::verify_pair_request;
 use crate::registry::unix_now_millis;
 use crate::session::{HandshakeContext, Session, AUTH_TIMEOUT};
@@ -181,7 +182,7 @@ async fn connection(mut socket: WebSocket, peer: SocketAddr, state: AppState) {
             }
         };
 
-        let reply = handle_text(&state, &mut session, &incoming);
+        let reply = handle_text(&state, &mut session, &incoming).await;
         if let Some(frame) = reply {
             if socket.send(Message::Text(frame.into())).await.is_err() {
                 break;
@@ -232,7 +233,7 @@ async fn read_with_deadline(
 }
 
 /// Parses one text frame and produces the reply, if any.
-fn handle_text(state: &AppState, session: &mut Session, text: &str) -> Option<String> {
+async fn handle_text(state: &AppState, session: &mut Session, text: &str) -> Option<String> {
     let envelope: Envelope<Value> = match serde_json::from_str(text) {
         Ok(envelope) => envelope,
         Err(e) => {
@@ -245,7 +246,7 @@ fn handle_text(state: &AppState, session: &mut Session, text: &str) -> Option<St
     let id = envelope.id.clone();
     let op = envelope.op.clone();
 
-    let outcome = handle_envelope(state, session, envelope);
+    let outcome = route(state, session, envelope).await;
     Some(match outcome {
         Ok(payload) => frame(MessageType::Res, id, &op, &payload),
         Err(e) => {
@@ -261,6 +262,38 @@ fn handle_text(state: &AppState, session: &mut Session, text: &str) -> Option<St
             )
         }
     })
+}
+
+/// Checks the envelope and the capability matrix, then dispatches.
+///
+/// Input ops are peeled off here because they await; everything else is handled synchronously
+/// so the `&mut Session` borrow never has to cross an await point.
+async fn route(
+    state: &AppState,
+    session: &mut Session,
+    envelope: Envelope<Value>,
+) -> Result<Value> {
+    if !envelope.is_supported_version() {
+        return Err(EngineError::wire(
+            ErrorCode::UnsupportedVersion,
+            format!("protocol version {} is not supported", envelope.v),
+        ));
+    }
+
+    let op = authorize(&envelope.op, session)?;
+
+    if matches!(
+        op,
+        KnownOp::InputKeyCombo
+            | KnownOp::InputKeySequence
+            | KnownOp::InputText
+            | KnownOp::InputMedia
+            | KnownOp::InputMouse
+    ) {
+        return handle_input(&state.engine, op, envelope.d).await;
+    }
+
+    handle_envelope(state, session, envelope)
 }
 
 fn handle_envelope(
@@ -427,13 +460,45 @@ fn handle_envelope(
             })
         }
 
-        // Known to the protocol, not served by this build. Input arrives in M3, profiles in M6,
-        // telemetry and actions in M8.
+        // Input is the one group that is deliberately not handled here: every arm awaits, and
+        // this function is synchronous so the session borrow does not cross an await point.
+        KnownOp::InputKeyCombo
+        | KnownOp::InputKeySequence
+        | KnownOp::InputText
+        | KnownOp::InputMedia
+        | KnownOp::InputMouse => unreachable!("input ops are routed before this point"),
+
+        // Known to the protocol, not served by this build. Profiles arrive in M6, actions,
+        // telemetry and settings in M8.
         _ => Err(EngineError::wire(
             ErrorCode::UnknownOp,
             format!("{} is not implemented in this build yet", op.as_str()),
         )),
     }
+}
+
+/// Handles the `input.*` ops.
+///
+/// Split out because these are the only handlers that await: injection goes to
+/// `spawn_blocking` and sequence delays sleep, neither of which can happen while a `&mut
+/// Session` is held. The capability check has already run by the time this is called.
+async fn handle_input(engine: &Arc<Engine>, op: KnownOp, payload_value: Value) -> Result<Value> {
+    let backend = engine.input();
+
+    match op {
+        KnownOp::InputKeyCombo => {
+            input_dispatch::key_combo(&backend, payload(payload_value)?).await?
+        }
+        KnownOp::InputKeySequence => {
+            input_dispatch::key_sequence(&backend, payload(payload_value)?).await?
+        }
+        KnownOp::InputText => input_dispatch::text(&backend, payload(payload_value)?).await?,
+        KnownOp::InputMedia => input_dispatch::media(&backend, payload(payload_value)?).await?,
+        KnownOp::InputMouse => input_dispatch::mouse(&backend, payload(payload_value)?).await?,
+        _ => unreachable!("handle_input is only called for input ops"),
+    }
+
+    value(&Empty {})
 }
 
 fn device_changed(engine: &Engine) -> muxdeck_core::DeviceChangedEvent {

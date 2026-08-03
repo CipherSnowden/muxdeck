@@ -112,8 +112,12 @@ runs without touching the real OS.
 
 `SendInput` with `INPUT_KEYBOARD`. Notes:
 
-- Use **scancodes** with `KEYEVENTF_SCANCODE` where possible; virtual-key codes are
-  keyboard-layout dependent and will produce wrong characters on non-US layouts.
+- Send **both** the virtual key and its scancode, and do **not** set `KEYEVENTF_SCANCODE`.
+  Fill `wScan` from `MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)`, which resolves against the *current*
+  layout. Ordinary applications read `wVk` and so get the right letter on AZERTY or Dvorak;
+  games and anything on raw input read `wScan` and so see a real physical key. Setting
+  `KEYEVENTF_SCANCODE` serves only the second group and sends the wrong letter on a non-US
+  layout; omitting the scancode serves only the first and makes the deck useless in games.
 - For `input.text`, use `KEYEVENTF_UNICODE` with the UTF-16 code unit — this bypasses layout
   entirely and handles non-ASCII correctly. Surrogate pairs need two events.
 - Extended keys (arrows, Insert/Delete/Home/End/PageUp/PageDown, right Ctrl/Alt, numpad Enter)

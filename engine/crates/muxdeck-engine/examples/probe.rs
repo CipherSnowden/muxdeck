@@ -120,6 +120,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
     println!("The latency budget in docs/ARCHITECTURE.md §7 allows 3-12 ms for the LAN round");
     println!("trip. Over loopback this should be well under that; a real phone will not be.");
+
+    // 5. Inject, if asked. Off by default because it types into whatever has focus.
+    if std::env::args().any(|arg| arg == "--type") {
+        println!();
+        println!("Focus a text editor. Typing in 5 seconds...");
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        deck.call(
+            KnownOp::InputText,
+            json!({ "text": "muxdeck: hello from the engine\n" }),
+        )
+        .await?;
+
+        // Select-all then delete, which proves modifiers and extended keys both work: CONTROL
+        // must be held across A, and DELETE must carry KEYEVENTF_EXTENDEDKEY or it arrives as
+        // numpad ".".
+        deck.call(KnownOp::InputKeyCombo, json!({ "keys": ["CONTROL", "A"] }))
+            .await?;
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        deck.call(KnownOp::InputKeyCombo, json!({ "keys": ["DELETE"] }))
+            .await?;
+
+        // Non-ASCII, to prove KEYEVENTF_UNICODE bypasses the keyboard layout. The last one is
+        // outside the BMP, so it costs a surrogate pair.
+        deck.call(
+            KnownOp::InputText,
+            json!({ "text": "unicode: é ü ß 日本語 🎛" }),
+        )
+        .await?;
+
+        println!("Sent. The editor should read: unicode: é ü ß 日本語 🎛");
+    } else {
+        println!();
+        println!("Re-run with --type to inject real keystrokes into the focused window.");
+    }
+
     Ok(())
 }
 

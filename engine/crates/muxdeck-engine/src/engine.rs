@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex, RwLock};
 
 use muxdeck_core::{Capabilities, DeviceInfo, Settings};
+use muxdeck_input::{platform_backend, InputBackend};
 
 use crate::config::{load_settings, save_settings, Paths};
 use crate::error::Result;
@@ -23,6 +24,9 @@ pub struct Engine {
     connected: Mutex<HashSet<String>>,
     /// The port actually bound, which differs from the configured one when binding to 0.
     port: RwLock<u16>,
+    /// The platform input backend. `Arc` rather than `Box` because every injection is handed
+    /// to `spawn_blocking`, which needs an owned handle.
+    input: Arc<dyn InputBackend>,
 }
 
 impl Engine {
@@ -40,7 +44,13 @@ impl Engine {
             pairing: Mutex::new(None),
             connected: Mutex::new(HashSet::new()),
             port: RwLock::new(port),
+            input: Arc::from(platform_backend()),
         }))
+    }
+
+    /// The platform input backend, for handing to `spawn_blocking`.
+    pub fn input(&self) -> Arc<dyn InputBackend> {
+        Arc::clone(&self.input)
     }
 
     pub fn settings(&self) -> Settings {
@@ -68,18 +78,35 @@ impl Engine {
         Ok(())
     }
 
-    /// What this build can actually do.
+    /// What this build can actually do right now.
     ///
-    /// Every input capability is false until M3 lands the Windows backend; from then on these
-    /// come from `InputBackend::preflight`, so a client greys out buttons rather than watching
-    /// them fail at press time (`docs/PROTOCOL.md` §4.1).
+    /// Reported in the `Ready` payload so a client greys out buttons rather than watching them
+    /// fail at press time (`docs/PROTOCOL.md` §4.1). A backend that fails `preflight` reports
+    /// nothing available, whatever it claims to support — on a Linux host with no `/dev/uinput`
+    /// access, every input button should be visibly dead rather than optimistically enabled.
     pub fn capabilities(&self) -> Capabilities {
+        let usable = self.input.preflight().is_ok();
+        let backend = self.input.capabilities();
+
         Capabilities {
-            text_unicode: false,
-            media_keys: false,
-            mouse: false,
+            text_unicode: usable && backend.text_unicode,
+            media_keys: usable && backend.media_keys,
+            mouse: usable && backend.mouse,
             shell_actions: self.settings().shell_actions_enabled,
         }
+    }
+
+    /// Why input injection is unavailable, if it is.
+    ///
+    /// Surfaced by the control panel as the loudest thing on the dashboard, with the
+    /// remediation the backend supplies (`docs/SERVER.md` §6).
+    pub fn preflight(&self) -> Result<()> {
+        self.input.preflight().map_err(|error| {
+            crate::error::EngineError::wire(
+                muxdeck_core::ErrorCode::InjectionFailed,
+                error.to_string(),
+            )
+        })
     }
 
     /// Placeholder until the profile store lands in M6.

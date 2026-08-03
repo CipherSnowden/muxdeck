@@ -331,7 +331,7 @@ already enforced for all of them, so those milestones add handlers, not permissi
 
 ---
 
-## [ ] M3 — Windows input injection
+## [x] M3 — Windows input injection
 
 > Implement milestone M3. Read docs/ENGINE.md §4 and §4.1 carefully — the notes on scancodes,
 > KEYEVENTF_UNICODE, extended keys, and batching a combo into a single SendInput call are all
@@ -353,6 +353,33 @@ already enforced for all of them, so those milestones add handlers, not permissi
 > Notepad.
 
 **Stop here and confirm it actually types before moving on.**
+
+**Done, and confirmed typing.** Outcome notes:
+
+- 92 tests. Verified end to end by injecting into a text box and reading the buffer back:
+  the captured string matched `unicode: é ü ß 日本語 🎛` byte for byte, including `U+1F39B`,
+  which is outside the BMP and therefore proves the surrogate-pair path.
+- The same capture proves the two things that fail *silently* when wrong. A first line was
+  typed, then `CONTROL+A` selected it and `DELETE` removed it, leaving only the unicode line —
+  so the modifier really was held across `A`, and `DELETE` really did carry
+  `KEYEVENTF_EXTENDEDKEY`. Without that flag it would have arrived as numpad `.` and appended
+  a dot instead of deleting.
+- **`docs/ENGINE.md` §4.1 was wrong about scancodes** and has been corrected. It said to use
+  `KEYEVENTF_SCANCODE`; that serves games but sends the wrong letter on a non-US layout. The
+  backend now sends both `wVk` and `wScan` with neither flag, which serves both audiences.
+- `capabilities` in the `Ready` payload is now real: it is the backend's own report ANDed with
+  `preflight()`, so a host that cannot inject advertises nothing rather than lying.
+- Platforms without a backend get `NullBackend`, so the daemon still starts on macOS and Linux
+  and says why input is unavailable instead of refusing to run. M7 replaces it.
+
+Worth knowing:
+
+- **`MockBackend` sits behind a `mock` feature, not `#[cfg(test)]`.** A `cfg(test)` module is
+  visible only to its own crate, so `muxdeck-engine`'s tests could not reach it. `cargo build`
+  never enables the feature, so it stays out of the shipped daemon.
+- Two safety valves that were not in the spec: `input.text` is capped at 4096 bytes and a
+  whole `input.key_sequence` at 30 seconds. Each character costs four `SendInput` events, and
+  a sequence runs detached from the socket that asked for it, so neither had a natural ceiling.
 
 ---
 
