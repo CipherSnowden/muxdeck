@@ -1,0 +1,73 @@
+name: client
+
+# The mobile deck. Targets Android and iOS/iPadOS only — never web, per CLAUDE.md
+# constraint #2. The iOS job exists from M0 onward because there is no Mac on the
+# development machine: this workflow is the only thing that ever compiles the iOS target,
+# and without it iPad support would rot silently.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/client/**'
+      - 'packages/muxdeck_protocol/**'
+      - 'protocol/fixtures/**'
+      - '.github/workflows/client.yml'
+  pull_request:
+    paths:
+      - 'apps/client/**'
+      - 'packages/muxdeck_protocol/**'
+      - 'protocol/fixtures/**'
+      - '.github/workflows/client.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/client
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `channel: stable` rather than a pinned version, to match the `fvm use stable`
+      # the project is pinned to locally (docs/CLIENT.md §1). Pinning one side and not
+      # the other means CI eventually stops testing what the dev machine builds.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+  ios-build:
+    # The only compile of the iOS target that ever happens. Unsigned — there are no
+    # signing credentials in CI and none are wanted; releases ship a sideloadable IPA.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS (unsigned)
+        run: flutter build ios --release --no-codesign

@@ -1,0 +1,15 @@
+# Normalise line endings in the repository so a Windows dev machine and the Linux and
+# macOS CI runners agree on file contents. Without this, whether a checkout is byte-clean
+# depends on each contributor's core.autocrlf setting.
+* text=auto eol=lf
+
+# Scripts and project files that must keep CRLF to work on Windows.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+*.sln  text eol=crlf
+
+# Generated lockfiles: collapse them in diffs and pull requests. They are still tracked
+# and still reviewed when it matters, just not by default.
+Cargo.lock    linguist-generated=true
+pubspec.lock  linguist-generated=true

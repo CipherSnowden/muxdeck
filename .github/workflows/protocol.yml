@@ -1,0 +1,51 @@
+name: protocol
+
+# The shared Dart protocol package. It has no Flutter dependency, so it gets the plain
+# Dart SDK rather than a full Flutter install — this job is the fast one that catches a
+# protocol change before the two app workflows even start.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/muxdeck_protocol/**'
+      - 'protocol/fixtures/**'
+      - '.github/workflows/protocol.yml'
+  pull_request:
+    paths:
+      - 'packages/muxdeck_protocol/**'
+      - 'protocol/fixtures/**'
+      - '.github/workflows/protocol.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protocol-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: packages/muxdeck_protocol
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze
+        run: dart analyze --fatal-infos
+
+      - name: Test
+        run: dart test

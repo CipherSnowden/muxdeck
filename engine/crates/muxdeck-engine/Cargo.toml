@@ -1,0 +1,13 @@
+[package]
+name = "muxdeck-engine"
+description = "MuxDeck engine library: TLS WebSocket server, pairing, auth, store, mDNS."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+muxdeck-core.workspace = true
+muxdeck-input.workspace = true

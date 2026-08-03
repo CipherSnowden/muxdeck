@@ -1,0 +1,51 @@
+name: server
+
+# The desktop control panel. Targets Windows, macOS and Linux — never web and never
+# mobile. Analyze and test only for now; desktop release builds arrive with packaging in
+# M9, along with the Linux libayatana-appindicator3 dependency the tray icon needs.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/server/**'
+      - 'packages/muxdeck_protocol/**'
+      - 'protocol/fixtures/**'
+      - '.github/workflows/server.yml'
+  pull_request:
+    paths:
+      - 'apps/server/**'
+      - 'packages/muxdeck_protocol/**'
+      - 'protocol/fixtures/**'
+      - '.github/workflows/server.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/server
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test

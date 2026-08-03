@@ -1,0 +1,15 @@
+[package]
+name = "muxdeck-input"
+description = "Input injection backends for MuxDeck: Windows, macOS and Linux behind one trait."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+# Platform backends land in M3 (Windows) and M7 (macOS, Linux). Their dependencies are
+# listed in docs/ENGINE.md §3 and go behind [target.'cfg(target_os = "...")'.dependencies]
+# so a Linux build never pulls the Windows crate.

@@ -98,6 +98,16 @@ future session finds them without archaeology.
 - **Milestone order is M0 → M9 as written.** No vertical spike, no reordering. M2 is the security
   backbone and is worth reviewing before code exists, which is why it is not deferred behind M3.
 
+- **No web platform — reaffirmed at M0.** A reference `flutter create` command carrying
+  `--platforms=android,ios,web` came up during M0 and was declined. A browser has no equivalent of
+  `HttpClient.badCertificateCallback`, so it cannot pin the engine's self-signed certificate
+  (`docs/CLIENT.md` §3); a web client could only connect over plaintext `ws://` or against a
+  CA-issued certificate the engine has no way to obtain. Either one removes host authentication
+  from the threat model in `docs/ARCHITECTURE.md` §5. Rule: `CLAUDE.md` constraint #2. Also
+  declined at the same time: renaming `apps/client`/`apps/server` to `apps/muxdeck-client`/
+  `apps/muxdeck-server` — under `apps/` the prefix is redundant, and the Dart package names are
+  already `muxdeck_client` and `muxdeck_server`.
+
 - **`docs/PROTOCOL.md` gaps were filled before M1.** `action.list`/`set`/`delete`, `settings.get`
   request shape, `settings.set` example, the literal `qr_payload` construction, `system.ping`
   units, and the `profile.get` response wrapper all now have documented payloads. M1 could not
@@ -112,9 +122,31 @@ file as you go — the checkboxes are how future sessions know where things stan
 
 ---
 
-## [ ] M0 — Scaffold
+## [x] M0 — Scaffold
 
 Repository skeleton, tooling config, CI that runs and does nothing useful yet.
+
+**Done.** Outcome notes:
+
+- Rust workspace builds clean on 1.97.1 — `cargo check`, `cargo fmt --check`,
+  `cargo clippy -D warnings` and `cargo test --workspace` all pass. `rust-toolchain.toml` pins
+  1.97.1, so `rustup` pulled that exact toolchain rather than reusing `stable`.
+- `muxdeck-engine` re-exports `muxdeck_core` and `muxdeck_input`, and `muxdeckd` has a
+  `use muxdeck_engine as _;`, so the dependency direction is compiled rather than merely declared.
+- `muxdeck-core` and `muxdeck-engine` carry `#![forbid(unsafe_code)]`. `muxdeck-input` deliberately
+  does not — `SendInput`, `CGEventPost` and uinput ioctls are all raw FFI.
+- All three Dart/Flutter projects created and pinned with `fvm use stable` (`.fvmrc` tracked,
+  `.fvm/` ignored). No `web` directory anywhere. Both apps analyze clean and their default tests
+  pass; `packages/muxdeck_protocol` analyzes, formats and tests clean.
+- CI workflows use `subosito/flutter-action` with `channel: stable` rather than a pinned version,
+  deliberately matching `fvm use stable`. Pinning one side and not the other would let CI drift
+  away from what the dev machine builds.
+- `engine.yml` installs no toolchain action; `rust-toolchain.toml` is left to do the pinning so a
+  drift between CI and local shows up instead of being masked.
+
+Deviation from the prompt below: `.editorconfig`, `README.md` and `LICENSE` landed as specified,
+but `protocol/fixtures/` and `tools/` are empty directories and therefore not tracked by git —
+they appear at M1 and M9 respectively.
 
 > Implement milestone M0 from docs/BUILD-PLAN.md.
 >

@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/muxdeck-core",
+    "crates/muxdeck-input",
+    "crates/muxdeck-engine",
+    "crates/muxdeckd",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97"
+license = "MIT"
+authors = ["CipherSnowden"]
+repository = "https://github.com/CipherSnowden/muxdeck"
+
+# Dependency direction is strictly downward and enforced here:
+#   muxdeckd -> muxdeck-engine -> { muxdeck-core, muxdeck-input }
+# muxdeck-core depends on nothing in this workspace. See docs/ENGINE.md §2.
+[workspace.dependencies]
+muxdeck-core = { path = "crates/muxdeck-core" }
+muxdeck-input = { path = "crates/muxdeck-input" }
+muxdeck-engine = { path = "crates/muxdeck-engine" }
+
+[profile.release]
+lto = "thin"
+strip = true
