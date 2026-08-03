@@ -644,7 +644,7 @@ than letting them fail at press time.
 
 ---
 
-## [ ] M8 — Polish
+## [x] M8 — Polish
 
 > Implement milestone M8: telemetry sampling and the evt telemetry.update broadcast; the
 > reconnect and backoff behaviour from docs/CLIENT.md §7 including immediate reconnect on app
@@ -654,6 +654,86 @@ than letting them fail at press time.
 >
 > Then measure the latency budget in docs/ARCHITECTURE.md §7 and report actual numbers for
 > press-to-keystroke on my LAN.
+
+**Done, with one number still unmeasured and two spec gaps found.**
+
+### Measured latency
+
+Release build, 200 samples, loopback TLS WebSocket, this machine:
+
+| Segment | §7 budget | p50 | p95 | max |
+| --- | --- | --- | --- | --- |
+| loopback round trip | (3–12 ms over Wi-Fi) | 0.027 ms | 0.042 ms | 0.105 ms |
+| round trip + press | — | 0.645 ms | 1.248 ms | 1.582 ms |
+| **engine dispatch + injection** | **< 4 ms** | **0.618 ms** | **1.206 ms** | **1.477 ms** |
+
+The engine-side figure is a subtraction: `system.ping` costs transport plus a trivial handler,
+`input.key_combo` costs transport plus dispatch plus `SendInput`, so the difference isolates the
+engine's own work without instrumenting it. It comes in at roughly a quarter of the 4 ms §7
+allows for dispatch and injection together. In a debug build the same figure is 0.659 ms p50 —
+barely different, because the time is spent in `SendInput`, not in Rust.
+
+**The two segments this machine cannot see are the touch-to-frame time and the real Wi-Fi round
+trip**, both of which need a phone on the far end. Loopback at 0.027 ms is a floor, not a
+substitute for 3–12 ms of access point. The remaining budget after the engine's 1.2 ms p95 is
+~24 ms, so there is a lot of room — but *press-to-keystroke on a real LAN is still unmeasured*.
+Reproduce with:
+
+```powershell
+cargo test --release -p muxdeck-engine --test integration -- --ignored --nocapture measure_latency
+```
+
+It is `#[ignore]`d because it injects real F24 presses into the focused window, and because a
+timing number from a shared CI runner is noise wearing a number's clothes.
+
+### Outcome notes
+
+- **The engine had none of `action.*`, `settings.get`/`settings.set` or a telemetry sampler.**
+  All three fell through to a catch-all that answered `UNKNOWN_OP` with "not implemented in this
+  build yet". That arm now means what it says: the op is an event, not a request.
+- **Shell execution is contained in three ways, and the check lives in one place.**
+  `Engine::run_action` is the only path to a process, and it does the `shell_actions_enabled`
+  check itself rather than trusting the socket handler to remember. Actions are spawned and
+  **not awaited** — a scene switch should feel instant and its exit code arrives long after the
+  user has moved on — but the child is still reaped by a task that logs a failure, so a wrong
+  command shows up in the panel's log tail rather than becoming a zombie.
+- **`settings.set` applies side effects in a deliberate order.** `autostart` is applied *before*
+  the write, because registering a startup entry is the one step that can genuinely fail and
+  persisting a setting whose effect did not happen would make the panel show a lie. The mDNS
+  re-advertise happens *after* and only warns on failure: the user asked for the name to change,
+  it changed, and the advertisement is rebuilt from settings at the next start anyway.
+- **mDNS ownership moved into `Engine`.** It used to live in `run_daemon`, which meant a host
+  rename could not re-advertise without a restart.
+- **The engine wrote no log file at all** — `init_tracing` logged to stdout on both paths and the
+  `--foreground` flag only documented an intention. The panel's log tail had nothing to tail, so
+  M8 added the `tracing-appender` daily rolling file. Note the guard: `let _ = init_tracing(…)`
+  drops it immediately and the file ends up empty.
+- **The panel reads the log from disk, not over the socket.** There is no `log.tail` op and
+  adding one would put a file read on the protocol for something only a same-machine panel could
+  ever use. It polls once a second rather than using `File.watch`, which on Windows can miss
+  appends to a file another process is writing.
+- **The client's reconnect is jittered ±25%.** Without it a room of decks that lost the same
+  access point comes back in lockstep, and each wave fails together — so they stay synchronised
+  for as long as the outage lasts. `NotPaired` deliberately does **not** retry: the host will
+  refuse the same key just as fast every time, and spinning would bury the one message that says
+  what to do.
+- **A refused press now turns the button red.** The press itself is still fire-on-pointer-down
+  and never waits on the network — the frame is already sent by the time the future is awaited —
+  but a refusal was previously indistinguishable from success.
+- 123 engine tests (23 integration), 51 client, 24 panel.
+
+### Two spec gaps found, both left for you to decide
+
+1. **`docs/SERVER.md` §6 lists a "log level" setting, but `docs/PROTOCOL.md` §4.6 has no such
+   field.** Adding it is a protocol change — PROTOCOL.md, then fixtures, then Rust, then Dart, in
+   one commit — so it was not guessed at. The log level is currently a `--log-level` flag only.
+2. **The dashboard cannot show the engine's real preflight message.** `docs/SERVER.md` §6 asks
+   for the specific remediation, but `Ready` carries capability booleans and no error string, so
+   the panel picks the platform-typical fix from `host_platform` instead. The engine's own
+   `preflight()` message is more specific and would need a wire field to travel.
+
+Not done, and out of scope as planned: the sparkline history is collected (60 samples) but the
+dashboard renders only the latest reading.
 
 ---
 

@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod actions;
 pub mod admin_client;
 pub mod config;
 pub mod discovery;
@@ -21,6 +22,7 @@ pub mod server;
 pub mod service;
 pub mod session;
 pub mod store;
+pub mod telemetry;
 
 pub use engine::Engine;
 pub use error::{EngineError, Result};

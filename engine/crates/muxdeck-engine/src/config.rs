@@ -82,6 +82,10 @@ impl Paths {
         self.root.join("profiles.json")
     }
 
+    pub fn actions(&self) -> PathBuf {
+        self.root.join("actions.json")
+    }
+
     pub fn logs(&self) -> PathBuf {
         self.root.join("logs")
     }

@@ -11,9 +11,12 @@ import '../../domain/session/session_state.dart';
 /// and a number on screen is what makes a regression against it noticeable rather than a vague
 /// feeling that the deck got worse.
 class StatusChip extends StatelessWidget {
-  const StatusChip({required this.state, super.key});
+  const StatusChip({required this.state, this.showRoundTrip = true, super.key});
 
   final SessionState state;
+
+  /// From the device's own settings. Off hides the millisecond readout, not the state.
+  final bool showRoundTrip;
 
   @override
   Widget build(BuildContext context) {
@@ -29,9 +32,16 @@ class StatusChip extends StatelessWidget {
       ),
       SessionReady(:final hostName, :final roundTripMs) => (
         const Color(0xFF1F8A70),
-        roundTripMs == null ? hostName : '$hostName · ${roundTripMs}ms',
+        roundTripMs == null || !showRoundTrip
+            ? hostName
+            : '$hostName · ${roundTripMs}ms',
       ),
-      SessionFailed(:final error) => (const Color(0xFFB3422F), error.message),
+      // Amber rather than red while a retry is pending: the deck is coming back on its own, and
+      // the colour is the difference between "wait" and "go and fix something".
+      SessionFailed(:final error, :final willRetry) => (
+        willRetry ? const Color(0xFFB8860B) : const Color(0xFFB3422F),
+        willRetry ? '${error.message} Retrying…' : error.message,
+      ),
     };
 
     return Container(

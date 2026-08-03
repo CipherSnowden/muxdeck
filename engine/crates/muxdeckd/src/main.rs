@@ -11,7 +11,6 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use muxdeck_engine::admin_client::AdminClient;
 use muxdeck_engine::config::Paths;
-use muxdeck_engine::discovery::Advertisement;
 use muxdeck_engine::muxdeck_core::KnownOp;
 use muxdeck_engine::{server, service, Engine};
 use tracing::info;
@@ -104,14 +103,17 @@ fn main() -> Result<()> {
         .install_default()
         .map_err(|_| anyhow::anyhow!("a rustls crypto provider was already installed"))?;
 
-    init_tracing(&cli.log_level, cli.foreground)?;
-
+    // Resolved before logging is set up, because the log file lives inside it.
     let paths = Paths::resolve(cli.config_dir.clone()).context("resolving the config directory")?;
 
     if cli.print_config_dir {
         println!("{}", paths.root().display());
         return Ok(());
     }
+
+    // Bound to a name, not `_`: `let _ = ...` drops the guard immediately and the log file ends
+    // up empty. Held until `main` returns so the appender flushes on the way out.
+    let _log_guard = init_tracing(&cli.log_level, cli.foreground, &paths.logs())?;
 
     if cli.reset_identity {
         return reset_identity(&paths, cli.yes);
@@ -157,20 +159,16 @@ async fn run_daemon(engine: std::sync::Arc<Engine>, port_override: Option<u16>) 
         "muxdeckd is listening"
     );
 
-    let advertisement = Advertisement::start(
-        &engine.host_name(),
-        engine.identity.host_id(),
-        engine.identity.fingerprint(),
-        running.addr.port(),
-    )
-    .context("advertising over mDNS")?;
+    // Owned by the engine rather than by this function, so `settings.set` can re-advertise
+    // under a new host name without a restart (`docs/PROTOCOL.md` §4.6).
+    engine.advertise().context("advertising over mDNS")?;
 
     tokio::signal::ctrl_c()
         .await
         .context("waiting for Ctrl-C")?;
     info!("shutting down");
 
-    advertisement.stop();
+    engine.stop_advertising();
     running.shutdown();
     Ok(())
 }
@@ -297,14 +295,46 @@ fn reset_identity(paths: &Paths, confirmed: bool) -> Result<()> {
     Ok(())
 }
 
-fn init_tracing(level: &str, foreground: bool) -> Result<()> {
+/// Sets up logging and returns the guard that keeps the file appender alive.
+///
+/// **The guard must outlive everything that logs.** `tracing-appender` writes on a background
+/// thread and flushes when the guard drops; dropping it early — by ignoring the return value —
+/// silently loses the tail of the log, which is precisely the part anybody reads.
+///
+/// A daemon started at logon has no terminal, so the file is the only place its output can go,
+/// and the panel's dashboard tails it (`docs/SERVER.md` §6). `--foreground` swaps it for stdout,
+/// which is what a developer running `cargo run` wants.
+fn init_tracing(level: &str, foreground: bool, log_dir: &std::path::Path) -> Result<LogGuard> {
     let filter =
         EnvFilter::try_new(level).with_context(|| format!("'{level}' is not a valid log level"))?;
 
-    // A file appender would need a guard held for the process lifetime; until the daemon has a
-    // long-lived owner for it (M5, alongside service installation) both paths go to stdout and
-    // the flag only documents the intent.
-    let _ = foreground;
-    tracing_subscriber::fmt().with_env_filter(filter).init();
-    Ok(())
+    if foreground {
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+        return Ok(None);
+    }
+
+    std::fs::create_dir_all(log_dir)
+        .with_context(|| format!("creating the log directory {}", log_dir.display()))?;
+
+    // Daily rotation, so the file a user is asked to send is bounded without a size check on
+    // every write. Old files are left alone: a week-old log is what diagnoses "it stopped
+    // working last Tuesday".
+    let appender = tracing_appender::rolling::daily(log_dir, LOG_FILE_PREFIX);
+    let (writer, guard) = tracing_appender::non_blocking(appender);
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        // No ANSI: the file is read by the panel and by text editors, and escape codes render as
+        // garbage in both.
+        .with_ansi(false)
+        .with_writer(writer)
+        .init();
+
+    Ok(Some(guard))
 }
+
+/// `None` when logging to stdout, which needs no guard.
+type LogGuard = Option<tracing_appender::non_blocking::WorkerGuard>;
+
+/// Log files are `muxdeckd.log.YYYY-MM-DD`. The panel globs for this prefix.
+const LOG_FILE_PREFIX: &str = "muxdeckd.log";

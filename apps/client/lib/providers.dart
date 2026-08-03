@@ -16,11 +16,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'data/hosts/host_record.dart';
 import 'data/hosts/host_store.dart';
 import 'data/identity/device_identity.dart';
+import 'data/settings/app_settings.dart';
 import 'domain/discovery/discovery_controller.dart';
 import 'domain/pairing/pairing_controller.dart';
 import 'domain/profile/profile_controller.dart';
 import 'domain/session/session_controller.dart';
 import 'domain/session/session_state.dart';
+import 'domain/settings/settings_controller.dart';
+import 'data/settings/wakelock_screen.dart';
 
 /// Overridden in `main()` once `SharedPreferences` has loaded, and in tests with a fake.
 ///
@@ -77,4 +80,21 @@ final pairingProvider = NotifierProvider<PairingController, PairingFlowState>(
 
 final profileProvider = NotifierProvider<ProfileController, DeckLayout?>(
   ProfileController.new,
+);
+
+/// Overridden in `main()` alongside [hostStoreProvider], and in tests with a fake.
+final appSettingsStoreProvider = Provider<AppSettingsStore>(
+  (ref) => throw UnimplementedError(
+    'appSettingsStoreProvider must be overridden in main()',
+  ),
+);
+
+/// The real one talks to `wakelock_plus`; widget tests override it with a no-op, since a
+/// platform channel is not available under `flutter test`.
+final screenLockProvider = Provider<ScreenLock>(
+  (ref) => const WakelockScreen(),
+);
+
+final settingsProvider = NotifierProvider<SettingsController, AppSettings>(
+  SettingsController.new,
 );

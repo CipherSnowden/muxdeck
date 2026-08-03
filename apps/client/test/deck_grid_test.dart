@@ -38,7 +38,7 @@ Widget _harness({
   required int rows,
   required Size screen,
   List<Button>? buttons,
-  void Function(Button)? onPressed,
+  Future<void> Function(Button)? onPressed,
   bool Function(Button)? isEnabled,
 }) {
   return MaterialApp(
@@ -53,7 +53,7 @@ Widget _harness({
             rows: rows,
             buttons: buttons ?? _fill(columns, rows),
             isEnabled: isEnabled,
-            onPressed: onPressed ?? (_) {},
+            onPressed: onPressed ?? (_) async {},
           ),
         ),
       ),
@@ -167,7 +167,7 @@ void main() {
           columns: 2,
           rows: 1,
           screen: phone,
-          onPressed: (button) => pressed.add(button.label),
+          onPressed: (button) async => pressed.add(button.label),
         ),
       );
 
@@ -201,7 +201,7 @@ void main() {
           buttons: [
             _button(col: 0, row: 0, label: 'Copy', keys: ['CONTROL', 'C']),
           ],
-          onPressed: (button) => sent = button,
+          onPressed: (button) async => sent = button,
         ),
       );
 
@@ -224,7 +224,7 @@ void main() {
           columns: 1,
           rows: 1,
           screen: phone,
-          onPressed: (_) => fired++,
+          onPressed: (_) async => fired++,
           isEnabled: (_) => false,
         ),
       );
