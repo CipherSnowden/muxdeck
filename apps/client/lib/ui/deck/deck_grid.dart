@@ -2,19 +2,20 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 
 import 'deck_button.dart';
 
 /// A fixed grid of deck keys.
 ///
-/// **Never scrolls.** Dimensions come from the layout, not from the screen, and the buttons
+/// **Never scrolls.** Dimensions come from the profile, not from the screen, and the buttons
 /// scale to fit whatever space there is — a deck you have to scroll is not a deck
 /// (`docs/CLIENT.md` §6).
 class DeckGrid extends StatelessWidget {
   const DeckGrid({
     required this.columns,
     required this.rows,
-    required this.actions,
+    required this.buttons,
     required this.onPressed,
     this.isEnabled,
     super.key,
@@ -23,16 +24,25 @@ class DeckGrid extends StatelessWidget {
   final int columns;
   final int rows;
 
-  /// Sparse: a cell with no action is empty. Indexed row-major.
-  final List<DeckAction?> actions;
+  /// Sparse and unordered: each button carries its own position, and a cell with no button is
+  /// empty (`docs/PROTOCOL.md` §6).
+  final List<Button> buttons;
 
-  final void Function(DeckAction action) onPressed;
+  final void Function(Button button) onPressed;
 
-  /// Whether the host can currently perform an action. Null means everything is available.
-  final bool Function(DeckAction action)? isEnabled;
+  /// Whether the host can currently perform a button's action. Null means everything is
+  /// available.
+  final bool Function(Button button)? isEnabled;
 
   @override
   Widget build(BuildContext context) {
+    // Indexed by position so the grid can be laid out row by row without searching the list for
+    // every cell.
+    final byPosition = <String, Button>{
+      for (final button in buttons)
+        '${button.pos.col},${button.pos.row}': button,
+    };
+
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = 8.0;
@@ -62,7 +72,7 @@ class DeckGrid extends StatelessWidget {
                       SizedBox(
                         width: cellWidth,
                         height: cellHeight,
-                        child: _cell(row * columns + column),
+                        child: _cell(byPosition['$column,$row']),
                       ),
                     ],
                   ],
@@ -75,14 +85,13 @@ class DeckGrid extends StatelessWidget {
     );
   }
 
-  Widget _cell(int index) {
-    final action = index < actions.length ? actions[index] : null;
-    if (action == null) return const SizedBox.shrink();
+  Widget _cell(Button? button) {
+    if (button == null) return const SizedBox.shrink();
 
     return DeckButton(
-      action: action,
-      enabled: isEnabled?.call(action) ?? true,
-      onPressed: () => onPressed(action),
+      button: button,
+      enabled: isEnabled?.call(button) ?? true,
+      onPressed: () => onPressed(button),
     );
   }
 }

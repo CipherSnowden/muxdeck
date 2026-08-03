@@ -464,6 +464,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.4.0"
+  muxdeck_icons:
+    dependency: "direct main"
+    description:
+      path: "../../packages/muxdeck_icons"
+      relative: true
+    source: path
+    version: "0.1.0"
   muxdeck_protocol:
     dependency: "direct main"
     description:

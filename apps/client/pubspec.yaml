@@ -45,6 +45,8 @@ dependencies:
   wakelock_plus: ^1.7.0
   muxdeck_protocol:
     path: ../../packages/muxdeck_protocol
+  muxdeck_icons:
+    path: ../../packages/muxdeck_icons
 
 dev_dependencies:
   flutter_test:

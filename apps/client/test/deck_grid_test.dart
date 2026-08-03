@@ -5,22 +5,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:muxdeck_client/ui/deck/deck_button.dart';
 import 'package:muxdeck_client/ui/deck/deck_grid.dart';
+import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 
-/// Fills a grid so every cell is occupied.
-List<DeckAction?> _actions(int count) => List.generate(
-  count,
-  (i) =>
-      DeckAction(label: 'Key $i', icon: Icons.circle, keys: ['DIGIT${i % 10}']),
+/// A button at a position, of the shape the engine actually sends.
+Button _button({
+  required int col,
+  required int row,
+  String? label,
+  String icon = 'circle',
+  List<String> keys = const ['A'],
+  KnownOp op = KnownOp.inputKeyCombo,
+}) => Button(
+  id: 'b_${col}_$row',
+  pos: Position(col: col, row: row),
+  label: label ?? 'Key $col$row',
+  icon: icon,
+  color: '#2D6CDF',
+  haptic: Haptic.light,
+  onTap: ButtonAction(Op.of(op), {'keys': keys}),
 );
+
+/// Fills every cell of a grid.
+List<Button> _fill(int columns, int rows) => [
+  for (var row = 0; row < rows; row++)
+    for (var column = 0; column < columns; column++)
+      _button(col: column, row: row),
+];
 
 /// Wraps the grid in a fixed-size surface, standing in for a device screen.
 Widget _harness({
   required int columns,
   required int rows,
   required Size screen,
-  List<DeckAction?>? actions,
-  void Function(DeckAction)? onPressed,
-  bool Function(DeckAction)? isEnabled,
+  List<Button>? buttons,
+  void Function(Button)? onPressed,
+  bool Function(Button)? isEnabled,
 }) {
   return MaterialApp(
     home: MediaQuery(
@@ -32,7 +51,7 @@ Widget _harness({
           child: DeckGrid(
             columns: columns,
             rows: rows,
-            actions: actions ?? _actions(columns * rows),
+            buttons: buttons ?? _fill(columns, rows),
             isEnabled: isEnabled,
             onPressed: onPressed ?? (_) {},
           ),
@@ -81,20 +100,52 @@ void main() {
       expect(find.byType(Scrollable), findsNothing);
     });
 
-    testWidgets('empty cells leave a gap rather than shifting the layout', (
+    testWidgets('buttons land in their own cells regardless of list order', (
+      tester,
+    ) async {
+      // Buttons are sparse and unordered — each carries its own position, so the grid must
+      // place by `pos` rather than by index. docs/PROTOCOL.md §6.
+      await tester.binding.setSurfaceSize(phone);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        _harness(
+          columns: 3,
+          rows: 1,
+          screen: phone,
+          buttons: [
+            _button(col: 2, row: 0, label: 'Third'),
+            _button(col: 0, row: 0, label: 'First'),
+          ],
+        ),
+      );
+
+      expect(find.byType(DeckButton), findsNWidgets(2));
+      final first = tester.getCenter(find.text('First'));
+      final third = tester.getCenter(find.text('Third'));
+      expect(
+        first.dx,
+        lessThan(third.dx),
+        reason: 'the button at col 0 must render left of the one at col 2',
+      );
+    });
+
+    testWidgets('an empty cell leaves a gap rather than shifting the layout', (
       tester,
     ) async {
       await tester.binding.setSurfaceSize(phone);
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      final sparse = <DeckAction?>[
-        const DeckAction(label: 'One', icon: Icons.looks_one, keys: ['DIGIT1']),
-        null,
-        const DeckAction(label: 'Three', icon: Icons.looks_3, keys: ['DIGIT3']),
-      ];
-
       await tester.pumpWidget(
-        _harness(columns: 3, rows: 1, screen: phone, actions: sparse),
+        _harness(
+          columns: 3,
+          rows: 1,
+          screen: phone,
+          buttons: [
+            _button(col: 0, row: 0, label: 'One'),
+            _button(col: 2, row: 0, label: 'Three'),
+          ],
+        ),
       );
 
       expect(find.byType(DeckButton), findsNWidgets(2));
@@ -116,7 +167,7 @@ void main() {
           columns: 2,
           rows: 1,
           screen: phone,
-          onPressed: (action) => pressed.add(action.label),
+          onPressed: (button) => pressed.add(button.label),
         ),
       );
 
@@ -126,38 +177,39 @@ void main() {
       await tester.pump();
 
       expect(pressed, [
-        'Key 0',
+        'Key 00',
       ], reason: 'the action must fire before the finger lifts');
 
       await gesture.up();
       await tester.pumpAndSettle();
 
       expect(pressed, [
-        'Key 0',
+        'Key 00',
       ], reason: 'releasing must not fire a second time');
     });
 
-    testWidgets('sends the canonical key names for the button', (tester) async {
+    testWidgets('carries the button action through unchanged', (tester) async {
       await tester.binding.setSurfaceSize(phone);
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      List<String>? sent;
+      Button? sent;
       await tester.pumpWidget(
         _harness(
           columns: 1,
           rows: 1,
           screen: phone,
-          actions: const [
-            DeckAction(label: 'Copy', icon: Icons.copy, keys: ['CONTROL', 'C']),
+          buttons: [
+            _button(col: 0, row: 0, label: 'Copy', keys: ['CONTROL', 'C']),
           ],
-          onPressed: (action) => sent = action.keys,
+          onPressed: (button) => sent = button,
         ),
       );
 
       await tester.tap(find.byType(DeckButton));
       await tester.pump();
 
-      expect(sent, ['CONTROL', 'C']);
+      expect(sent?.onTap?.op.known, KnownOp.inputKeyCombo);
+      expect(sent?.onTap?.d['keys'], ['CONTROL', 'C']);
     });
 
     testWidgets('a disabled button does not fire', (tester) async {
@@ -181,6 +233,25 @@ void main() {
       await tester.pump();
 
       expect(fired, 0);
+    });
+
+    testWidgets('an unknown icon renders the fallback rather than a blank', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(phone);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        _harness(
+          columns: 1,
+          rows: 1,
+          screen: phone,
+          buttons: [_button(col: 0, row: 0, icon: 'no_such_icon')],
+        ),
+      );
+
+      expect(find.byIcon(Icons.circle), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

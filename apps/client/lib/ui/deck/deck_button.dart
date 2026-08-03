@@ -5,24 +5,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-/// What a button does and how it looks. Hardcoded this milestone; profiles arrive in M6.
-class DeckAction {
-  const DeckAction({
-    required this.label,
-    required this.icon,
-    required this.keys,
-    this.colour = const Color(0xFF2D6CDF),
-  });
-
-  final String label;
-  final IconData icon;
-
-  /// Canonical key names, `docs/PROTOCOL.md` §5.
-  final List<String> keys;
-
-  final Color colour;
-}
+import 'package:muxdeck_icons/muxdeck_icons.dart';
+import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 
 /// A deck key.
 ///
@@ -31,13 +15,13 @@ class DeckAction {
 /// `docs/CLIENT.md` §6 calls it out explicitly.
 class DeckButton extends StatefulWidget {
   const DeckButton({
-    required this.action,
+    required this.button,
     required this.onPressed,
     this.enabled = true,
     super.key,
   });
 
-  final DeckAction action;
+  final Button button;
   final VoidCallback onPressed;
 
   /// False when the host cannot perform this action, from the `capabilities` block of the
@@ -57,22 +41,37 @@ class _DeckButtonState extends State<DeckButton> {
 
     // Haptic first, before the network send. It confirms the touch registered, not that the
     // action landed — so it must not wait on a round trip. `docs/CLIENT.md` §6.
-    unawaited(HapticFeedback.lightImpact());
+    unawaited(_haptic());
 
     setState(() => _pressed = true);
     widget.onPressed();
   }
 
+  Future<void> _haptic() => switch (widget.button.haptic) {
+    Haptic.none => Future<void>.value(),
+    Haptic.light => HapticFeedback.lightImpact(),
+    Haptic.medium => HapticFeedback.mediumImpact(),
+    Haptic.heavy => HapticFeedback.heavyImpact(),
+  };
+
   void _handleUp([PointerEvent? _]) {
     if (_pressed) setState(() => _pressed = false);
+  }
+
+  /// `#RRGGBB` from the profile, falling back rather than throwing on a malformed value.
+  Color get _colour {
+    final hex = widget.button.color.replaceFirst('#', '');
+    final value = int.tryParse(hex, radix: 16);
+    if (value == null || hex.length != 6) return const Color(0xFF2D6CDF);
+    return Color(0xFF000000 | value);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final action = widget.action;
+    final button = widget.button;
     final base = widget.enabled
-        ? action.colour
+        ? _colour
         : theme.disabledColor.withValues(alpha: 0.25);
 
     return Listener(
@@ -86,7 +85,7 @@ class _DeckButtonState extends State<DeckButton> {
         child: Semantics(
           button: true,
           enabled: widget.enabled,
-          label: action.label,
+          label: button.label,
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: base,
@@ -106,7 +105,9 @@ class _DeckButtonState extends State<DeckButton> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      action.icon,
+                      // From the curated map, so an unknown name draws a dot rather than a
+                      // blank square. See muxdeck_icons.
+                      iconFor(button.icon),
                       size: iconSize,
                       color: Colors.white.withValues(
                         alpha: widget.enabled ? 0.95 : 0.5,
@@ -116,7 +117,7 @@ class _DeckButtonState extends State<DeckButton> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: Text(
-                        action.label,
+                        button.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,

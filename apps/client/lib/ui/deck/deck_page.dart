@@ -5,77 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 
+import '../../domain/profile/profile_controller.dart';
+import '../../domain/session/session_state.dart';
 import '../../providers.dart';
 import '../common/status_chip.dart';
-import 'deck_button.dart';
 import 'deck_grid.dart';
-
-/// The default 3×5 layout.
-///
-/// Hardcoded this milestone. M6 replaces it with `profile.get` and a live-updating layout; the
-/// grid widget already takes its dimensions as parameters so that change touches this list and
-/// nothing else.
-const defaultDeckColumns = 5;
-const defaultDeckRows = 3;
-
-const defaultDeckActions = <DeckAction?>[
-  DeckAction(label: 'Copy', icon: Icons.content_copy, keys: ['CONTROL', 'C']),
-  DeckAction(label: 'Paste', icon: Icons.content_paste, keys: ['CONTROL', 'V']),
-  DeckAction(label: 'Cut', icon: Icons.content_cut, keys: ['CONTROL', 'X']),
-  DeckAction(label: 'Undo', icon: Icons.undo, keys: ['CONTROL', 'Z']),
-  DeckAction(label: 'Redo', icon: Icons.redo, keys: ['CONTROL', 'Y']),
-
-  DeckAction(
-    label: 'Select all',
-    icon: Icons.select_all,
-    keys: ['CONTROL', 'A'],
-  ),
-  DeckAction(label: 'Save', icon: Icons.save, keys: ['CONTROL', 'S']),
-  DeckAction(label: 'Find', icon: Icons.search, keys: ['CONTROL', 'F']),
-  DeckAction(
-    label: 'Switch app',
-    icon: Icons.swap_horiz,
-    keys: ['ALT', 'TAB'],
-    colour: Color(0xFF6B4FBB),
-  ),
-  DeckAction(
-    label: 'Desktop',
-    icon: Icons.desktop_windows,
-    keys: ['META', 'D'],
-    colour: Color(0xFF6B4FBB),
-  ),
-
-  DeckAction(
-    label: 'Screenshot',
-    icon: Icons.photo_camera,
-    keys: ['META', 'SHIFT', 'S'],
-    colour: Color(0xFF1F8A70),
-  ),
-  DeckAction(
-    label: 'Lock',
-    icon: Icons.lock,
-    keys: ['META', 'L'],
-    colour: Color(0xFF1F8A70),
-  ),
-  DeckAction(
-    label: 'Task view',
-    icon: Icons.grid_view,
-    keys: ['META', 'TAB'],
-    colour: Color(0xFF1F8A70),
-  ),
-  DeckAction(
-    label: 'Close',
-    icon: Icons.close,
-    keys: ['ALT', 'F4'],
-    colour: Color(0xFFB3422F),
-  ),
-  DeckAction(
-    label: 'Escape',
-    icon: Icons.keyboard_return,
-    keys: ['ESCAPE'],
-    colour: Color(0xFF4A5568),
-  ),
-];
 
 class DeckPage extends ConsumerWidget {
   const DeckPage({super.key});
@@ -83,6 +17,7 @@ class DeckPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
+    final layout = ref.watch(profileProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFF12141A),
@@ -102,19 +37,55 @@ class DeckPage extends ConsumerWidget {
                 ],
               ),
             ),
-            Expanded(
-              child: DeckGrid(
-                columns: defaultDeckColumns,
-                rows: defaultDeckRows,
-                actions: defaultDeckActions,
-                isEnabled: (_) => session.isReady,
-                onPressed: (action) => _press(ref, action),
-              ),
-            ),
+            Expanded(child: _body(ref, session, layout)),
           ],
         ),
       ),
     );
+  }
+
+  Widget _body(WidgetRef ref, SessionState session, DeckLayout? layout) {
+    if (layout == null) {
+      // Only before the very first profile has ever been seen. After that the cache means there
+      // is always something to draw.
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final page = layout.profile.pages.first;
+    final ready = session is SessionReady ? session.ready : null;
+
+    return Opacity(
+      // A cached layout renders immediately but dimmed, so it is visibly not yet live rather
+      // than silently stale. `docs/CLIENT.md` §7.
+      opacity: layout.isLive ? 1.0 : 0.45,
+      child: DeckGrid(
+        columns: layout.profile.grid.cols,
+        rows: layout.profile.grid.rows,
+        buttons: page.buttons,
+        isEnabled: (button) => layout.isLive && _canPerform(button, ready),
+        onPressed: (button) => _press(ref, button),
+      ),
+    );
+  }
+
+  /// Whether the host can actually carry out a button's action.
+  ///
+  /// Greying out beats letting the press fail: the `capabilities` block exists precisely so a
+  /// deck can show what is unavailable instead of discovering it at press time
+  /// (`docs/PROTOCOL.md` §4.1).
+  bool _canPerform(Button button, Ready? ready) {
+    if (ready == null) return false;
+    final action = button.onTap;
+    if (action == null) return false;
+
+    return switch (action.op.known) {
+      KnownOp.inputText => ready.capabilities.textUnicode,
+      KnownOp.inputMedia => ready.capabilities.mediaKeys,
+      KnownOp.inputMouse => ready.capabilities.mouse,
+      KnownOp.actionRun => ready.capabilities.shellActions,
+      // Key combos need no capability: a host that can inject at all can send them.
+      _ => true,
+    };
   }
 
   /// Sends a press.
@@ -122,10 +93,14 @@ class DeckPage extends ConsumerWidget {
   /// Fire-and-forget by design: a press that cannot be sent is **dropped, never queued**.
   /// Replaying `CONTROL+W` five seconds after the user pressed it is worse than losing it
   /// (`docs/CLIENT.md` §7).
-  void _press(WidgetRef ref, DeckAction action) {
+  void _press(WidgetRef ref, Button button) {
     final client = ref.read(sessionProvider.notifier).client;
-    if (client == null) return;
+    final action = button.onTap;
+    if (client == null || action == null) return;
 
-    client.fireAndForget(KnownOp.inputKeyCombo, {'keys': action.keys});
+    final op = action.op.known;
+    if (op == null) return;
+
+    client.fireAndForget(op, action.d);
   }
 }

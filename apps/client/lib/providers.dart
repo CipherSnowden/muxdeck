@@ -18,6 +18,7 @@ import 'data/hosts/host_store.dart';
 import 'data/identity/device_identity.dart';
 import 'domain/discovery/discovery_controller.dart';
 import 'domain/pairing/pairing_controller.dart';
+import 'domain/profile/profile_controller.dart';
 import 'domain/session/session_controller.dart';
 import 'domain/session/session_state.dart';
 
@@ -72,4 +73,8 @@ final discoveryProvider = NotifierProvider<DiscoveryController, DiscoveryState>(
 
 final pairingProvider = NotifierProvider<PairingController, PairingFlowState>(
   PairingController.new,
+);
+
+final profileProvider = NotifierProvider<ProfileController, DeckLayout?>(
+  ProfileController.new,
 );
