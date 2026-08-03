@@ -134,12 +134,18 @@ A button's `icon` field is a string, and Flutter **tree-shakes icons** — a run
 debug. Do not work around this with `--no-tree-shake-icons`; it bloats every build to fix one
 lookup.
 
-Instead, a curated map of roughly 200 deck-appropriate Material icons lives in the shared
-protocol package as `packages/muxdeck_protocol/lib/src/icon_map.dart` — a
-`const Map<String, IconData>`. Because the constant references each `IconData` directly, the
-tree-shaker keeps exactly those glyphs. The client renders from this map and the desktop icon
-picker offers from the same map, so the two cannot disagree about what a name means or which
-names exist. Unknown names fall back to a filled dot.
+Instead, a curated map of roughly 200 deck-appropriate Material icons lives in
+`packages/muxdeck_icons/lib/src/icon_map.dart` — a `const Map<String, IconData>`. Because the
+constant references each `IconData` directly, the tree-shaker keeps exactly those glyphs. The
+client renders from this map and the desktop icon picker offers from the same map, so the two
+cannot disagree about what a name means or which names exist. Unknown names fall back to a filled
+dot.
+
+**It is a separate package from `muxdeck_protocol`, deliberately.** `IconData` comes from
+`package:flutter`, and `muxdeck_protocol` is a plain Dart package — which is what lets CI test the
+protocol on the Dart SDK alone, in seconds, with no Flutter install. `muxdeck_icons` depends on
+Flutter and on `muxdeck_protocol`; both apps depend on `muxdeck_icons`. Do not solve this by
+adding Flutter to the protocol package.
 
 ## 6. Screens
 

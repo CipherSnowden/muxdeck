@@ -111,12 +111,24 @@ Device IDs follow the same rule: `device_id = "d_" + first 16 hex chars of
 SHA-256(device_public_key_bytes)`.
 
 The certificate carries SANs for `localhost`, `127.0.0.1`, `::1`, and every non-loopback local IP
-present when it is generated; it is regenerated if the host's addresses change.
+present when it is generated.
 
 > **Clients authenticate the host by certificate fingerprint pinning only.** Hostname and CA
 > validation are deliberately bypassed, because the host has no DNS name and no CA. The SANs
 > exist for tooling convenience, not for trust. Do not "fix" this by enabling hostname
 > validation — it will break every installation.
+
+**The certificate is generated once and never regenerated.** It is immutable for its full ten
+years, and in particular it is **not** refreshed when the host's IP addresses change.
+
+This follows directly from the paragraph above. Because no client validates SANs, a stale SAN
+list has no effect on anything. Regenerating, on the other hand, produces a new fingerprint —
+and since the fingerprint is the only thing authenticating the host, every paired device would
+see its pin fail and demand a QR re-pair. A DHCP lease renewal would unpair the household. See
+§8, which promises the opposite and is the behaviour that matters.
+
+The only thing that legitimately replaces the certificate is `muxdeckd --reset-identity`, which
+is explicitly destructive, requires `--yes`, and unpairs every device by design.
 
 ### 5.2 Pairing (once per device)
 
@@ -287,8 +299,10 @@ without a measurement showing JSON is the bottleneck.
   grid, keep the last known layout on screen so it snaps back instantly.
 - **Engine not running:** control panel offers a one-click start; mobile client shows
   "host found but not responding" distinctly from "host not found".
-- **Host IP changed:** client re-resolves via mDNS using the stored host ID, re-pins by
-  fingerprint, reconnects without re-pairing.
+- **Host IP changed:** client re-resolves via mDNS using the stored host ID, confirms the
+  certificate still matches the fingerprint it stored at pairing time, and reconnects **without
+  re-pairing**. This works only because the certificate never changes (§5.1) — the two statements
+  are load-bearing on each other, so do not weaken either one alone.
 - **Injection failure** (e.g. Linux `/dev/uinput` permission denied): engine returns a
   structured error the client surfaces as a toast, and logs the remediation step.
 

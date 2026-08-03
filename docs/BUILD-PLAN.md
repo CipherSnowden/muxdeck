@@ -104,6 +104,19 @@ future session finds them without archaeology.
   `apps/muxdeck-server` — under `apps/` the prefix is redundant, and the Dart package names are
   already `muxdeck_client` and `muxdeck_server`.
 
+- **The TLS certificate is generated once and never regenerated.** §5.1 previously said it was
+  refreshed when the host's addresses changed, which contradicted §8's promise that an IP change
+  needs no re-pair: a new certificate means a new fingerprint, and the fingerprint is the only
+  thing authenticating the host, so a DHCP lease renewal would have unpaired every device. Since
+  no client validates SANs, refreshing them buys nothing. Detail: `docs/ARCHITECTURE.md` §5.1.
+
+- **mDNS advertisement belongs to M2.** It was specified in `docs/ARCHITECTURE.md` §6 and listed
+  as an engine module in `docs/ENGINE.md` §5, but no milestone had claimed it, and M4's client
+  discovery depends on it existing.
+
+- **The icon map lives in `packages/muxdeck_icons`,** not in `muxdeck_protocol`. See the M1
+  section below and `docs/CLIENT.md` §5.
+
 - **`docs/PROTOCOL.md` gaps were filled before M1.** `action.list`/`set`/`delete`, `settings.get`
   request shape, `settings.set` example, the literal `qr_payload` construction, `system.ping`
   units, and the `profile.get` response wrapper all now have documented payloads. M1 could not
@@ -211,7 +224,7 @@ Deviations from the spec, all recorded in `docs/PROTOCOL.md` in the same commit:
   `key_sequence` step that omits `hold_ms` must not gain one on the way back out, and a
   defaulted field would break exact round-tripping.
 
-### Open question for M4 — `icon_map.dart` cannot live where the spec puts it
+### [x] Resolved — `icon_map.dart` moves to its own package
 
 `docs/CLIENT.md` §5 places the curated icon map at
 `packages/muxdeck_protocol/lib/src/icon_map.dart` as a `const Map<String, IconData>`.
@@ -219,15 +232,16 @@ Deviations from the spec, all recorded in `docs/PROTOCOL.md` in the same commit:
 which is exactly what lets `protocol.yml` run it with the Dart SDK alone, in seconds, without a
 Flutter install. Adding a Flutter dependency would make `dart test` unusable there.
 
-Three ways out, to decide before M4 builds the deck grid:
+**Decision: a second package, `packages/muxdeck_icons`** — a Flutter package depending on
+`muxdeck_protocol`, holding the curated `const Map<String, IconData>`. Both apps depend on it.
+This keeps `muxdeck_protocol` plain Dart so `protocol.yml` keeps testing on the Dart SDK alone in
+seconds. `docs/CLIENT.md` §5 has been updated to match. **No code until M4** — nothing before then
+renders an icon.
 
-1. **A second package**, `packages/muxdeck_icons`, depending on Flutter and on
-   `muxdeck_protocol`. Keeps the protocol pure and the fast CI job fast. Recommended.
-2. Make `muxdeck_protocol` a Flutter package. Simplest to write, but the protocol tests then
-   need a Flutter toolchain and the shared package stops being usable by anything non-Flutter.
-3. Keep only the icon *names* in the protocol package and the `IconData` map in the client.
-   The desktop editor then needs its own copy, and the two can disagree about which names
-   exist — which is the specific failure §5 exists to prevent.
+Rejected: making `muxdeck_protocol` a Flutter package (the protocol tests would need a Flutter
+toolchain, and the shared package would stop being usable by anything non-Flutter), and splitting
+names from icons across two places (the desktop picker and the deck could then disagree about
+which names exist, which is the specific failure §5 exists to prevent).
 
 > Implement milestone M1 from docs/BUILD-PLAN.md. docs/PROTOCOL.md is the source of truth —
 > follow it exactly and do not invent fields or ops.
@@ -270,6 +284,11 @@ No input injection yet. This is the security backbone.
 > `muxdeckd pair begin/list/revoke` subcommands are **in scope for this milestone, not stubs** —
 > M4 needs them to pair a phone before the desktop panel exists. They connect over loopback with
 > the admin token like any other admin client.
+>
+> Also build the discovery module: advertise `_muxdeck._tcp.local.` with the TXT records from
+> docs/ARCHITECTURE.md §6 (`v`, `id`, `name`, `fp`), and de-advertise on shutdown. This is in M2
+> rather than later because `id` and `fp` are exactly what identity generation already computes,
+> and M4's client discovery has nothing to find without it.
 >
 > While you are there, print the resolved config directory on this machine and correct the
 > docs/ENGINE.md §6 table if it does not match what the `directories` crate actually emits.
