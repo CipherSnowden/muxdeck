@@ -18,6 +18,7 @@ pub mod pairing;
 pub mod registry;
 pub mod secret_file;
 pub mod server;
+pub mod service;
 pub mod session;
 
 pub use engine::Engine;

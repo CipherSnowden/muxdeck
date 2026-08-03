@@ -248,10 +248,37 @@ These are not a second control path into the engine: they read `admin.token` fro
 directory and connect over loopback as an ordinary admin WebSocket client, exactly like the
 panel. `--ttl` obeys the `30..=300` clamp from `docs/PROTOCOL.md` §4.2.
 
-- Windows: a Scheduled Task at logon (no admin required), not a Windows Service — a Service
-  runs in session 0 and **cannot inject input into the user's desktop**. This is a real trap.
+- Windows: a Scheduled Task at logon, not a Windows Service — a Service runs in session 0 and
+  **cannot inject input into the user's desktop**. This is a real trap. Register it with
+  `schtasks /Create /XML`, **not** `/SC ONLOGON`; see below.
 - macOS: a `launchd` LaunchAgent in `~/Library/LaunchAgents/`.
 - Linux: a systemd **user** unit in `~/.config/systemd/user/`.
+
+### 7.1 Why the Windows task is registered from XML
+
+`schtasks /Create /TN MuxDeck /TR "<exe>" /SC ONLOGON /F` **fails with `ERROR: Access is denied.`
+for a non-elevated caller** — verified on Windows 11. `/SC ONCE` succeeds unelevated, so it is the
+logon trigger specifically. Two reasons, and every `/RU` variant hits one of them:
+
+- `/SC ONLOGON` emits a `LogonTrigger` with no `UserId`, meaning "at logon of *any* user" — a
+  machine-wide change that requires administrator.
+- `/RU <user>` without `/RP` selects the `S4U` logon type, which needs `SeTcbPrivilege`.
+
+So the task is defined in XML naming the current user in **both** the trigger and the principal,
+with `LogonType=InteractiveToken`, and registered with `/Create /XML`. That preserves what this
+section actually wants — a per-user logon task, no elevation, never session 0 — which the literal
+flag form cannot deliver.
+
+The XML also overrides three defaults that would each break the daemon silently:
+
+| Setting | Default | Why it is overridden |
+| --- | --- | --- |
+| `ExecutionTimeLimit` | `PT72H` | Task Scheduler kills the task after three days |
+| `DisallowStartIfOnBatteries` | `true` | The deck would not start on an unplugged laptop |
+| `StopIfGoingOnBatteries` | `true` | The deck would die the moment the charger came out |
+
+The file must be written **UTF-16LE with a BOM**: `schtasks` hands it to MSXML, which rejects a
+UTF-8 file with `unable to switch the encoding`.
 
 ## 8. Testing
 

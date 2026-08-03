@@ -39,6 +39,15 @@ pub enum EngineError {
     #[error("could not set owner-only permissions on {path}: {detail}")]
     Permissions { path: PathBuf, detail: String },
 
+    /// A platform auto-start tool — `schtasks`, `launchctl`, `systemctl` — was absent or
+    /// refused. Never reaches a socket: the `service` subcommands run from a terminal or from
+    /// the desktop panel's installer step, so the detail is safe to show in full.
+    #[error("{context}: {detail}")]
+    Service {
+        context: &'static str,
+        detail: String,
+    },
+
     /// A failure that maps directly onto a wire error and should be sent to the client.
     #[error("{}: {}", .0.code.as_str(), .0.message)]
     Wire(ErrorPayload),
@@ -58,6 +67,13 @@ impl EngineError {
             context,
             path: path.as_ref().to_path_buf(),
             source,
+        }
+    }
+
+    pub fn service(context: &'static str, detail: impl Into<String>) -> Self {
+        EngineError::Service {
+            context,
+            detail: detail.into(),
         }
     }
 

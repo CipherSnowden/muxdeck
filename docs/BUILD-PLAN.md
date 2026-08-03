@@ -468,7 +468,7 @@ in sync), and no `packages/muxdeck_icons` yet — the M4 grid is hardcoded, so t
 
 ---
 
-## [ ] M5 — Desktop control panel
+## [x] M5 — Desktop control panel
 
 > Implement milestone M5. Read docs/SERVER.md fully first.
 >
@@ -483,6 +483,43 @@ in sync), and no `packages/muxdeck_icons` yet — the M4 grid is hardcoded, so t
 >
 > Make sure Quit closes the panel without stopping the engine, with a separate explicit
 > "Stop engine" menu item.
+
+**Done, and verified running against a live engine.** Outcome notes:
+
+- The panel builds and runs on Windows with VS 2026, connects over loopback with the admin
+  token, and renders real engine data — screenshots confirmed 2 paired devices matching the
+  engine's actual registry, real capabilities, and a live QR pairing window with a working
+  countdown. Pairing no longer needs a terminal, which is what this milestone was for.
+- 109 engine tests (14 new), 5 panel tests, 40 client tests. `cargo fmt`, `clippy -D warnings`
+  and `flutter analyze` all clean.
+
+- **`docs/ENGINE.md` §7 was wrong about Windows auto-start, and it has been corrected.** It said
+  a Scheduled Task at logon needs no admin. `schtasks /SC ONLOGON` in fact fails with
+  `ERROR: Access is denied.` unelevated — confirmed by hand — because that flag emits a trigger
+  with no `UserId`, meaning "any user", which is a machine-wide change. The fix is
+  `/Create /XML` naming the current user in both the trigger and the principal. New §7.1 records
+  this, along with three Task Scheduler defaults that would each kill the daemon silently
+  (a 72-hour execution limit, and two battery restrictions).
+- Verified end to end by hand: install unelevated, inspect the registered task
+  (`InteractiveToken`, per-user SID, `PT0S`, battery limits off), uninstall twice for
+  idempotence, confirm the machine is left clean.
+
+- **The networking layer moved into `packages/muxdeck_protocol`.** The panel and the mobile
+  client both need certificate pinning, and two copies is how one gets a security fix and the
+  other quietly does not. It is all plain Dart, so the package stays Flutter-free and its CI job
+  still runs on the Dart SDK alone. The client's 40 tests passed unchanged across the move.
+- A bug the new tests caught: reading the certificate broke on CRLF line endings — a stray `\r`
+  per line corrupted the base64 and produced a plausible-looking fingerprint matching nothing.
+  It is a Windows text file, so that was not hypothetical.
+
+Known ceilings, both commented in the code: the Windows task status word is localised, so on a
+non-English Windows a running task reads as stopped — harmless, since a second daemon just fails
+to bind and exits; and `launchctl load -w` is the deprecated spelling of `bootstrap gui/<uid>`,
+kept because it needs no uid lookup.
+
+Deferred to M8 as planned: the Settings screen, the log tail, and telemetry. The tray has Open,
+Pair and Quit; "Stop engine" arrives with the settings work that gives it somewhere to report
+failure.
 
 ---
 

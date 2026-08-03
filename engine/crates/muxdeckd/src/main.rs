@@ -13,7 +13,7 @@ use muxdeck_engine::admin_client::AdminClient;
 use muxdeck_engine::config::Paths;
 use muxdeck_engine::discovery::Advertisement;
 use muxdeck_engine::muxdeck_core::KnownOp;
-use muxdeck_engine::{server, Engine};
+use muxdeck_engine::{server, service, Engine};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
@@ -87,8 +87,11 @@ enum PairCommand {
 
 #[derive(Subcommand)]
 enum ServiceCommand {
+    /// Register the daemon to start at logon for the current user.
     Install,
+    /// Remove the auto-start registration.
     Uninstall,
+    /// Report whether auto-start is registered and whether it is running.
     Status,
 }
 
@@ -114,7 +117,10 @@ fn main() -> Result<()> {
         return reset_identity(&paths, cli.yes);
     }
 
-    let engine = Engine::load(paths).context("loading engine state")?;
+    // Cloned rather than moved because `service` needs the config directory too, and loading the
+    // engine first is deliberate: `service install` is often the very first command a fresh
+    // install runs, and it should leave the identity and certificate generated behind it.
+    let engine = Engine::load(paths.clone()).context("loading engine state")?;
 
     if cli.print_fingerprint {
         println!("{}", engine.identity.fingerprint());
@@ -128,7 +134,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Some(Command::Pair(command)) => runtime.block_on(run_pair(&engine, command)),
-        Some(Command::Service(command)) => run_service(command),
+        Some(Command::Service(command)) => run_service(command, paths.root()),
         None => runtime.block_on(run_daemon(engine, cli.port)),
     }
 }
@@ -236,12 +242,32 @@ async fn run_pair(engine: &Engine, command: PairCommand) -> Result<()> {
     Ok(())
 }
 
-/// Auto-start registration. Implemented per platform in M5 — see `docs/BUILD-PLAN.md`.
-fn run_service(_command: ServiceCommand) -> Result<()> {
-    bail!(
-        "service management is not implemented yet; it lands in milestone M5. \
-         Start the daemon manually with `muxdeckd` in the meantime."
-    )
+/// Auto-start registration, per platform. `muxdeck_engine::service` explains why Windows gets a
+/// Scheduled Task and not a Windows Service.
+///
+/// `install` prints its follow-up notes rather than acting on them: on Linux the `/dev/uinput`
+/// permission fix needs root, and an installer that escalates on its own is one the user cannot
+/// audit. Blank lines between notes because each is a paragraph or a block of shell commands.
+fn run_service(command: ServiceCommand, config_dir: &std::path::Path) -> Result<()> {
+    match command {
+        ServiceCommand::Install => {
+            let installed = service::install(config_dir).context("registering auto-start")?;
+            println!("Auto-start registered: {}", installed.location);
+            for note in &installed.notes {
+                println!();
+                println!("{note}");
+            }
+        }
+        ServiceCommand::Uninstall => {
+            service::uninstall().context("removing the auto-start registration")?;
+            println!("Auto-start removed. The daemon keeps running until you stop it.");
+        }
+        ServiceCommand::Status => {
+            let status = service::status().context("reading the auto-start registration")?;
+            println!("{status}");
+        }
+    }
+    Ok(())
 }
 
 /// Regenerates the host identity. Destructive: every paired device stops working.
