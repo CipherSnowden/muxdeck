@@ -28,7 +28,8 @@ class DeckGrid extends StatelessWidget {
   /// empty (`docs/PROTOCOL.md` §6).
   final List<Button> buttons;
 
-  final void Function(Button button) onPressed;
+  /// Fires a button's action. A future that completes with an error flashes the button red.
+  final Future<void> Function(Button button) onPressed;
 
   /// Whether the host can currently perform a button's action. Null means everything is
   /// available.

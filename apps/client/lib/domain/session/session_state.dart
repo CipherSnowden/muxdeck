@@ -52,7 +52,14 @@ class SessionReady extends SessionState {
 }
 
 class SessionFailed extends SessionState {
-  const SessionFailed(this.error);
+  const SessionFailed(this.error, {this.willRetry = false});
 
   final AppError error;
+
+  /// Whether a reconnect is already scheduled.
+  ///
+  /// The distinction is the whole difference between "give up and go to the host list" and "sit
+  /// tight, it is coming back" — a deck that reconnects silently but reads as broken is worse
+  /// than one that says so.
+  final bool willRetry;
 }

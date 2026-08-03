@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'app.dart';
 import 'data/hosts/host_store.dart';
+import 'data/settings/app_settings.dart';
 import 'providers.dart';
 
 Future<void> main() async {
@@ -18,11 +21,14 @@ Future<void> main() async {
   ]);
 
   // Loaded before the app starts so no screen has to handle a store that is not ready yet.
-  final hostStore = await HostStore.open();
+  final prefs = await SharedPreferences.getInstance();
 
   runApp(
     ProviderScope(
-      overrides: [hostStoreProvider.overrideWithValue(hostStore)],
+      overrides: [
+        hostStoreProvider.overrideWithValue(HostStore(prefs)),
+        appSettingsStoreProvider.overrideWithValue(AppSettingsStore(prefs)),
+      ],
       child: const MuxDeckApp(),
     ),
   );

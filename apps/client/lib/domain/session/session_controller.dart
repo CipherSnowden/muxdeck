@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +20,27 @@ const pingInterval = Duration(seconds: 5);
 /// Consecutive missed pings that force a reconnect.
 const missedPingsBeforeReconnect = 3;
 
+/// The reconnect schedule from `docs/CLIENT.md` §7, in milliseconds. The last entry is the cap.
+const reconnectBackoffMs = [500, 1000, 2000, 4000, 8000];
+
+/// How far either side of the scheduled delay the jitter can land.
+const reconnectJitter = 0.25;
+
+/// The delay before retry number [attempt], counting from zero.
+///
+/// Jittered on purpose. Without it, a room of decks that lost the same access point comes back
+/// in lockstep and hammers the engine in waves — and worse, each wave fails together, so they
+/// stay synchronised for as long as the outage lasts.
+Duration reconnectDelay(int attempt, {Random? random}) {
+  final index = attempt.clamp(0, reconnectBackoffMs.length - 1);
+  final base = reconnectBackoffMs[index];
+  final spread =
+      (random ?? _random).nextDouble() * 2 * reconnectJitter - reconnectJitter;
+  return Duration(milliseconds: (base * (1 + spread)).round());
+}
+
+final _random = Random();
+
 /// Builds the transport for a host. Provided so tests can substitute a fake.
 typedef TransportFactory = Transport Function(HostRecord host);
 
@@ -33,9 +55,22 @@ class SessionController extends Notifier<SessionState> {
   Timer? _pingTimer;
   var _missedPings = 0;
 
+  /// The host to reconnect to. Kept after a failure precisely so there is something to retry.
+  HostRecord? _host;
+
+  /// Whether the user wants a connection. Cleared only by [disconnect], so a dropped socket
+  /// retries but a deliberate exit stays exited.
+  var _wantConnected = false;
+
+  Timer? _reconnectTimer;
+  var _attempt = 0;
+
   @override
   SessionState build() {
-    ref.onDispose(_teardown);
+    ref.onDispose(() {
+      _reconnectTimer?.cancel();
+      unawaited(_teardown());
+    });
     return const SessionDisconnected();
   }
 
@@ -44,11 +79,35 @@ class SessionController extends Notifier<SessionState> {
   /// Exposed so the deck can send input ops without routing every one through this controller.
   ProtocolClient? get client => state.isReady ? _client : null;
 
-  /// Connects and authenticates.
+  /// Connects and authenticates, retrying with backoff if the connection drops.
   ///
   /// Safe to call repeatedly: an in-flight or established connection is torn down first, so a
   /// retry after failure does not leak the previous socket.
   Future<void> connect(HostRecord host) async {
+    _host = host;
+    _wantConnected = true;
+    _attempt = 0;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    await _open(host);
+  }
+
+  /// Reconnects at once, skipping whatever backoff was pending.
+  ///
+  /// Called when the app returns from the background: iOS will have killed the socket while
+  /// suspended, and making the user wait out an eight-second backoff to press a button they are
+  /// already looking at is the wrong answer. `docs/CLIENT.md` §7.
+  Future<void> reconnectNow() async {
+    final host = _host;
+    if (!_wantConnected || host == null || state.isReady) return;
+
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _attempt = 0;
+    await _open(host);
+  }
+
+  Future<void> _open(HostRecord host) async {
     await _teardown();
     state = SessionConnecting(host.hostName);
 
@@ -65,14 +124,34 @@ class SessionController extends Notifier<SessionState> {
       final ready = await _handshake(client, identity, host);
 
       state = SessionReady(hostName: host.hostName, ready: ready);
+      _attempt = 0;
       _startPinging();
     } on AppError catch (error) {
       await _teardown();
-      state = SessionFailed(error);
+      _fail(error);
     } catch (error) {
       await _teardown();
-      state = SessionFailed(TransportFailed('$error'));
+      _fail(TransportFailed('$error'));
     }
+  }
+
+  /// Reports a failure and schedules a retry, unless retrying cannot possibly help.
+  void _fail(AppError error) {
+    // A device the host does not recognise will be refused just as fast on every attempt.
+    // Retrying would spin forever and bury the one message that tells the user what to do:
+    // pair again.
+    final worthRetrying = _wantConnected && error is! NotPaired;
+
+    state = SessionFailed(error, willRetry: worthRetrying);
+    if (!worthRetrying) return;
+
+    final delay = reconnectDelay(_attempt);
+    _attempt++;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(delay, () {
+      final host = _host;
+      if (_wantConnected && host != null) unawaited(_open(host));
+    });
   }
 
   /// `session.hello` → challenge → `session.auth` → `Ready`.
@@ -152,9 +231,8 @@ class SessionController extends Notifier<SessionState> {
       _missedPings++;
       if (_missedPings >= missedPingsBeforeReconnect) {
         _pingTimer?.cancel();
-        state = const SessionFailed(
-          TransportFailed('The host stopped responding.'),
-        );
+        unawaited(_teardown());
+        _fail(const TransportFailed('The host stopped responding.'));
       }
       return;
     }
@@ -169,6 +247,10 @@ class SessionController extends Notifier<SessionState> {
   }
 
   Future<void> disconnect() async {
+    _wantConnected = false;
+    _host = null;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     await _teardown();
     state = const SessionDisconnected();
   }

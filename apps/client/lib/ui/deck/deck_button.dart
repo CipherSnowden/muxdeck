@@ -22,7 +22,10 @@ class DeckButton extends StatefulWidget {
   });
 
   final Button button;
-  final VoidCallback onPressed;
+
+  /// Fires the action. The returned future completing with an error is what turns the button
+  /// red — the press itself is never delayed by waiting on it.
+  final Future<void> Function() onPressed;
 
   /// False when the host cannot perform this action, from the `capabilities` block of the
   /// `Ready` payload. A disabled button is visibly unavailable rather than failing at press
@@ -33,8 +36,19 @@ class DeckButton extends StatefulWidget {
   State<DeckButton> createState() => _DeckButtonState();
 }
 
+/// How long a refused press stays red.
+const _failureFlash = Duration(milliseconds: 600);
+
 class _DeckButtonState extends State<DeckButton> {
   var _pressed = false;
+  var _failed = false;
+  Timer? _flashTimer;
+
+  @override
+  void dispose() {
+    _flashTimer?.cancel();
+    super.dispose();
+  }
 
   void _handleDown(PointerDownEvent _) {
     if (!widget.enabled) return;
@@ -43,8 +57,26 @@ class _DeckButtonState extends State<DeckButton> {
     // action landed — so it must not wait on a round trip. `docs/CLIENT.md` §6.
     unawaited(_haptic());
 
-    setState(() => _pressed = true);
-    widget.onPressed();
+    setState(() {
+      _pressed = true;
+      _failed = false;
+    });
+    _flashTimer?.cancel();
+
+    // Fired, then watched. The send has already happened by the time this future is awaited, so
+    // nothing about the press waits on the network — but a refusal still has to be visible, or
+    // a button whose action the host rejected looks identical to one that worked
+    // (`docs/CLIENT.md` §6).
+    unawaited(widget.onPressed().catchError((Object _) => _flashFailure()));
+  }
+
+  void _flashFailure() {
+    if (!mounted) return;
+    setState(() => _failed = true);
+    _flashTimer?.cancel();
+    _flashTimer = Timer(_failureFlash, () {
+      if (mounted) setState(() => _failed = false);
+    });
   }
 
   Future<void> _haptic() => switch (widget.button.haptic) {
@@ -70,9 +102,11 @@ class _DeckButtonState extends State<DeckButton> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final button = widget.button;
-    final base = widget.enabled
-        ? _colour
-        : theme.disabledColor.withValues(alpha: 0.25);
+    final base = switch ((widget.enabled, _failed)) {
+      (_, true) => const Color(0xFFB3422F),
+      (true, _) => _colour,
+      (false, _) => theme.disabledColor.withValues(alpha: 0.25),
+    };
 
     return Listener(
       onPointerDown: _handleDown,
