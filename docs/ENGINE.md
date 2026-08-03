@@ -70,7 +70,7 @@ and `session.auth.res.json`), which is what will catch anyone refactoring this a
 | errors | `thiserror` (libs), `anyhow` (binary) |
 | logging | `tracing`, `tracing-subscriber`, `tracing-appender` |
 | CLI | `clap` (derive) |
-| system metrics | `sysinfo` |
+| system metrics | `sysinfo` (`default-features = false`, `features = ["system"]` — CPU and memory only) |
 | Windows input | `windows` (Win32_UI_Input_KeyboardAndMouse, Win32_Foundation) |
 | macOS input | `core-graphics`, plus `objc2` for `NSEvent` alone — media keys are the one thing with no Core Graphics constructor (§4.2) |
 | Linux input | `evdev` — the crate wraps the `/dev/uinput` ioctls, so the backend needs no `unsafe` of its own |

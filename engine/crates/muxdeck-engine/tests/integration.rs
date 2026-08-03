@@ -629,6 +629,106 @@ async fn an_unauthenticated_socket_is_closed_after_the_timeout() {
     assert_eq!(muxdeck_engine::session::AUTH_TIMEOUT.as_secs(), 10);
 }
 
+/// Measures the segments of `docs/ARCHITECTURE.md` §7 that this machine can actually observe.
+///
+/// Run it deliberately:
+/// ```text
+/// cargo test -p muxdeck-engine --test integration -- --ignored --nocapture measure_latency
+/// ```
+///
+/// `#[ignore]`d for two reasons: it injects **real keystrokes** into whatever window has focus,
+/// and a timing measurement on a shared CI runner is noise wearing a number's clothes.
+///
+/// What it can and cannot see:
+/// - **Measured**: loopback round trip, engine parse and dispatch, OS input injection.
+/// - **Not measured**: touch to client frame, and the real Wi-Fi round trip. Both need a phone
+///   on the far end of an access point; loopback is a floor, not a substitute.
+///
+/// The arithmetic is a subtraction. `system.ping` costs transport plus a trivial handler, and
+/// `input.key_combo` costs transport plus dispatch plus injection — so the difference is the
+/// engine-side work, isolated without instrumenting the engine itself.
+#[tokio::test]
+#[ignore = "injects real keystrokes and measures timing; run it deliberately"]
+async fn measure_latency() {
+    const SAMPLES: usize = 200;
+    const WARMUP: usize = 20;
+
+    let harness = Harness::start("latency").await;
+    let (key, device_id) = pair_device(&harness, 70).await;
+    let mut deck = authenticate(&harness, &key, &device_id).await;
+
+    // F24 is on no keyboard anybody owns and is bound by essentially nothing, so a few hundred
+    // presses land somewhere harmless.
+    let press = json!({ "keys": ["F24"], "hold_ms": 0 });
+
+    let mut ping_us = Vec::with_capacity(SAMPLES);
+    let mut press_us = Vec::with_capacity(SAMPLES);
+
+    for i in 0..(SAMPLES + WARMUP) {
+        let start = std::time::Instant::now();
+        deck.call(KnownOp::SystemPing, json!({ "t_client": 0 }))
+            .await
+            .expect("ping");
+        let ping = start.elapsed();
+
+        let start = std::time::Instant::now();
+        deck.call(KnownOp::InputKeyCombo, press.clone())
+            .await
+            .expect("key combo");
+        let combo = start.elapsed();
+
+        // The first samples pay for lazily-built buffers and a cold branch predictor, and
+        // including them makes a p95 that describes startup rather than steady state.
+        if i >= WARMUP {
+            ping_us.push(ping.as_micros() as u64);
+            press_us.push(combo.as_micros() as u64);
+        }
+    }
+
+    ping_us.sort_unstable();
+    press_us.sort_unstable();
+
+    let report = |name: &str, samples: &[u64]| {
+        println!(
+            "{name:<28} p50 {:>7.3} ms   p95 {:>7.3} ms   max {:>7.3} ms",
+            samples[samples.len() / 2] as f64 / 1000.0,
+            samples[samples.len() * 95 / 100] as f64 / 1000.0,
+            samples[samples.len() - 1] as f64 / 1000.0,
+        );
+    };
+
+    println!();
+    println!("MuxDeck latency, {SAMPLES} samples, loopback TLS WebSocket");
+    println!("---------------------------------------------------------------------");
+    report("loopback round trip", &ping_us);
+    report("round trip + press", &press_us);
+
+    let engine_side: Vec<u64> = press_us
+        .iter()
+        .zip(&ping_us)
+        .map(|(press, ping)| press.saturating_sub(*ping))
+        .collect();
+    let mut engine_side = engine_side;
+    engine_side.sort_unstable();
+    report("dispatch + injection", &engine_side);
+
+    println!();
+    println!("Not measured here: touch to client frame, and the Wi-Fi round trip.");
+    println!("Both need a phone on the far end; loopback is a floor, not a substitute.");
+    println!();
+
+    // Not an assertion on the whole budget — this cannot see the network or the touch, and a
+    // test that failed on a busy machine would be deleted within a week. It asserts only the
+    // part that is genuinely under the engine's control, and generously: `docs/ARCHITECTURE.md`
+    // §7 budgets 1 ms for dispatch and 3 ms for injection.
+    let engine_p95 = engine_side[engine_side.len() * 95 / 100];
+    assert!(
+        engine_p95 < 10_000,
+        "engine-side p95 is {engine_p95} µs, far above the 4 ms §7 allows for dispatch and \
+         injection together — something is blocking the runtime"
+    );
+}
+
 // --- M8: settings, actions and telemetry ---------------------------------------------
 
 #[tokio::test]
