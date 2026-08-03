@@ -737,7 +737,7 @@ dashboard renders only the latest reading.
 
 ---
 
-## [ ] M9 — Packaging and release
+## [x] M9 — Packaging and release
 
 > Implement milestone M9. Set up release CI: a tag push builds muxdeckd for Windows, macOS and
 > Linux; builds the desktop panel for all three, each bundled with the matching muxdeckd binary
@@ -748,6 +748,50 @@ dashboard renders only the latest reading.
 > Attach everything to a GitHub Release. Write the README with screenshots, install
 > instructions per platform, the Linux libayatana-appindicator3 and input-group prerequisites,
 > and the macOS Accessibility permission step.
+
+**Done except the screenshots, which need a person.**
+
+`.github/workflows/release.yml` builds six artefacts on a `v*` tag and opens a **draft** release —
+draft rather than published, so the notes and the artefact list can be looked at before anyone
+downloads them.
+
+| Artefact | Contents |
+| --- | --- |
+| `muxdeck-panel-windows-x64.zip` | panel + `muxdeckd.exe` beside it |
+| `muxdeck-panel-macos-arm64.zip` | `.app` with `muxdeckd` inside `Contents/MacOS/` |
+| `muxdeck-panel-linux-x64.tar.gz` | bundle + `muxdeckd` beside it |
+| `muxdeck-client-android.apk` | debug-signed, for sideloading |
+| `muxdeck-client-ios-unsigned.ipa` | `Payload/Runner.app`, for AltStore or a personal certificate |
+
+Outcome notes:
+
+- **The daemon ships beside the panel, never as a Flutter asset.** Assets are extracted to a
+  temporary directory at runtime, which breaks code signing on macOS and trips antivirus
+  heuristics on Windows. `apps/server`'s locator already looked next to its own executable first
+  (`docs/SERVER.md` §5); the workflow puts it there.
+- **macOS is packaged with `ditto`, not `zip`.** A plain `zip` loses the symlinks and resource
+  forks a `.app` bundle needs, and produces something macOS refuses to launch — with an error
+  that blames the app rather than the archive.
+- **The Android release is signed with the debug key, and that is a decision with a tail.**
+  Android identifies an app by its signature, so introducing a real keystore later makes updates
+  fail with a signature mismatch for everyone who installed an earlier build; they would have to
+  uninstall first, losing their paired hosts. The alternative — a signing key in a public
+  repository — is worse. `build.gradle.kts` now says so where the config lives, instead of
+  carrying Flutter's generated "TODO: add your own signing config".
+- **`workflow_dispatch` builds everything but publishes nothing**, so the pipeline can be proved
+  without cutting a release. The `publish` job is gated on `startsWith(github.ref, 'refs/tags/v')`.
+- **Artefact paths were verified locally rather than assumed**: `cargo build --release -p muxdeckd`
+  and `flutter build windows --release` both ran on the development machine and produced exactly
+  the paths the workflow copies from. The macOS and Linux paths are Flutter's standard output
+  directories and are proved by the first run.
+- **Release builds live in `release.yml`, not in `server.yml`.** A pull request should not pay for
+  three desktop compiles; `server.yml`'s comment now says that rather than promising them "in M9".
+
+**Not done: the screenshots.** They need a running panel and a real tablet on the same network,
+which nothing here can produce. `docs/screenshots/README.md` names the four that belong in the
+README, what each should show, and the two things to check before committing one — no real
+device IDs or fingerprints, and dark theme throughout so the panel and the deck do not look like
+two different projects.
 
 ---
 

@@ -1,0 +1,291 @@
+name: release
+
+# Everything a user downloads. A tag push builds all six artefacts and attaches them to a
+# GitHub Release.
+#
+# The desktop panel ships **with `muxdeckd` beside it**, not as a Flutter asset. Assets are
+# extracted to a temporary directory at runtime, which breaks code signing on macOS and trips
+# antivirus heuristics on Windows — and `apps/server`'s locator looks next to its own executable
+# first for exactly this reason (`docs/SERVER.md` §5).
+
+on:
+  push:
+    tags: ['v*']
+  # So the whole pipeline can be proved without cutting a release first. A dispatch run
+  # uploads artefacts and stops short of publishing.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # --- the daemon ------------------------------------------------------------------------
+  engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x64
+            binary: muxdeckd.exe
+          - os: macos-latest
+            target: macos-arm64
+            binary: muxdeckd
+          - os: ubuntu-latest
+            target: linux-x64
+            binary: muxdeckd
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+
+      # No toolchain action: engine/rust-toolchain.toml pins the version and rustup honours it.
+      - name: Show toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+          key: release-${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release -p muxdeckd
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: muxdeckd-${{ matrix.target }}
+          path: engine/target/release/${{ matrix.binary }}
+          if-no-files-found: error
+
+  # --- the desktop control panel, bundled with the daemon --------------------------------
+  panel:
+    needs: engine
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x64
+            binary: muxdeckd.exe
+          - os: macos-latest
+            target: macos-arm64
+            binary: muxdeckd
+          - os: ubuntu-latest
+            target: linux-x64
+            binary: muxdeckd
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # `ninja`, `cmake` and `clang` are Flutter's Linux desktop toolchain, not the project's:
+      # CLAUDE.md's "no ninja" note is about the Windows development machine, where none of
+      # this is needed. `libayatana-appindicator3-dev` is what `tray_manager` links against —
+      # without it the build fails at link time, not at runtime.
+      - name: Install Linux build dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config libgtk-3-dev \
+            liblzma-dev libstdc++-12-dev libayatana-appindicator3-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: apps/server
+        run: flutter pub get
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        working-directory: apps/server
+        run: flutter build windows --release
+
+      - name: Build (macOS)
+        if: matrix.os == 'macos-latest'
+        working-directory: apps/server
+        run: flutter build macos --release
+
+      - name: Build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: apps/server
+        run: flutter build linux --release
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: muxdeckd-${{ matrix.target }}
+          path: daemon
+
+      # Beside the panel executable, never inside the app's asset bundle. On macOS that means
+      # inside Contents/MacOS/, which is where a bundle's siblings live and where the locator
+      # looks (`Platform.resolvedExecutable`'s directory).
+      - name: Bundle the daemon beside the panel (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $out = "apps/server/build/windows/x64/runner/Release"
+          Copy-Item daemon/muxdeckd.exe "$out/muxdeckd.exe"
+          Compress-Archive -Path "$out/*" -DestinationPath muxdeck-panel-windows-x64.zip
+
+      - name: Bundle the daemon beside the panel (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          app="apps/server/build/macos/Build/Products/Release/muxdeck_server.app"
+          cp daemon/muxdeckd "$app/Contents/MacOS/muxdeckd"
+          chmod +x "$app/Contents/MacOS/muxdeckd"
+          # ditto rather than zip: it preserves the resource forks and symlinks a .app bundle
+          # needs, and a plain zip produces a bundle macOS refuses to launch.
+          ditto -c -k --sequesterRsrc --keepParent "$app" muxdeck-panel-macos-arm64.zip
+
+      - name: Bundle the daemon beside the panel (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          out="apps/server/build/linux/x64/release/bundle"
+          cp daemon/muxdeckd "$out/muxdeckd"
+          chmod +x "$out/muxdeckd"
+          tar -czf muxdeck-panel-linux-x64.tar.gz -C "$out" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: panel-${{ matrix.target }}
+          path: |
+            muxdeck-panel-*.zip
+            muxdeck-panel-*.tar.gz
+          if-no-files-found: error
+
+  # --- the mobile deck -------------------------------------------------------------------
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Signed with the debug key, because there is no release keystore and putting one in CI
+      # would mean a signing key in a public repository. Android will install it, and every
+      # release must use the same build or updates fail with a signature mismatch — which is
+      # also why replacing this with a real keystore later is a breaking change for anyone who
+      # sideloaded an earlier build.
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Name it after the tag
+        run: mv build/app/outputs/flutter-apk/app-release.apk muxdeck-client-android.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-android
+          path: apps/client/muxdeck-client-android.apk
+          if-no-files-found: error
+
+  ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build (unsigned)
+        run: flutter build ios --release --no-codesign
+
+      # An IPA is a zip with the app inside a directory literally called `Payload`. Sideloading
+      # tools reject any other layout, so this is not a naming convention — it is the format.
+      - name: Package as a sideloadable IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -r -q muxdeck-client-ios-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-ios
+          path: apps/client/muxdeck-client-ios-unsigned.ipa
+          if-no-files-found: error
+
+  # --- publish ---------------------------------------------------------------------------
+  publish:
+    needs: [panel, android, ios]
+    # Only a tag publishes. A workflow_dispatch run still builds everything, so the pipeline
+    # can be proved without creating a release nobody wanted.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List what will be published
+        run: ls -lh artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: true
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            **Windows** — unzip and run `muxdeck_server.exe`. `muxdeckd.exe` sits beside it and
+            the panel starts it for you. Windows SmartScreen will warn about an unsigned
+            application; there is no code-signing certificate for this project.
+
+            **macOS** — unzip and move `muxdeck_server.app` to Applications. The build is
+            unsigned and unnotarised, so the first launch needs
+            `xattr -dr com.apple.quarantine /Applications/muxdeck_server.app`, or
+            right-click → Open. **MuxDeck then needs Accessibility permission** before it can
+            type anything: System Settings → Privacy & Security → Accessibility → add
+            MuxDeck. Without it every button silently does nothing.
+
+            **Linux** — extract the tarball and run `./muxdeck_server`. You need
+            `libayatana-appindicator3-1` for the tray icon, and your user must be in the
+            `input` group for `/dev/uinput`:
+
+            ```sh
+            sudo usermod -aG input $USER   # then log out and back in
+            ```
+
+            **Android** — install the APK. It is signed with a debug key, so you will need to
+            allow installation from unknown sources.
+
+            **iOS / iPadOS** — the IPA is **unsigned**. Sideload it with AltStore, Sideloadly or
+            your own developer certificate. There is no App Store build and no TestFlight.
+
+            ---
+
+            Pair by opening the panel, choosing **Pair a device**, and scanning the QR code with
+            the app. Both devices must be on the same network — MuxDeck is Wi-Fi only, on
+            purpose ([why](docs/TRANSPORT.md)).

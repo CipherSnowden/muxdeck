@@ -1,8 +1,9 @@
 name: server
 
 # The desktop control panel. Targets Windows, macOS and Linux — never web and never
-# mobile. Analyze and test only for now; desktop release builds arrive with packaging in
-# M9, along with the Linux libayatana-appindicator3 dependency the tray icon needs.
+# mobile. Analyze and test only: the release builds for all three platforms, and the Linux
+# libayatana-appindicator3 dependency the tray icon needs, live in release.yml so that a
+# pull request does not pay for three desktop compiles.
 
 on:
   push:

@@ -27,8 +27,14 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Deliberately the debug key, not a placeholder. There is no release keystore
+            // because putting one in a public repository would publish the signing key, and
+            // releases ship a sideloadable APK rather than a Play Store build.
+            //
+            // The consequence is worth knowing before it bites: Android identifies an app by
+            // its signature, so introducing a real keystore later makes updates fail with a
+            // signature mismatch for everyone who installed an earlier build. They would have
+            // to uninstall first, losing their paired hosts.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
