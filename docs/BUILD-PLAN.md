@@ -25,19 +25,14 @@ only outstanding item is the one flagged in §1.2.
 | `cmake` | present | `F:\utilities\cmake` |
 
 Note the deviation from the original plan: the machine has **Visual Studio 2026 Community**, not
-the 2022 Build Tools. Rust links against it without complaint. Flutter is the open question —
-its Windows desktop toolchain check and CMake generator were written against VS 2022 (v17), and
-VS 2026 is v18.
+the 2022 Build Tools. This was the one genuine unknown at M0 — Flutter's Windows desktop toolchain
+check and CMake generator were written against VS 2022 (v17), and VS 2026 is v18.
 
-**Before M0, run this and read the "Visual Studio — develop Windows apps" line:**
+**Resolved: both toolchains accept VS 2026.** Rust links against it without complaint, and
+`fvm flutter run -d windows` builds and launches `apps/server`. No fallback was needed.
 
-```powershell
-cd F:\projects\muxdeck
-fvm flutter doctor -v
-```
-
-If Flutter does not recognise VS 2026, install the 2022 Build Tools alongside it — they coexist,
-and only `apps/server` on Windows is affected:
+If a future Flutter upgrade ever regresses this, the fix is to install the 2022 Build Tools
+alongside 2026 — they coexist, and only `apps/server` on Windows is affected:
 
 ```powershell
 winget install --id Microsoft.VisualStudio.2022.BuildTools -e   # Desktop development with C++
