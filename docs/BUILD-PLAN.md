@@ -53,9 +53,10 @@ Done. `github.com/CipherSnowden/muxdeck-legacy` is private and archived, and is 
 part of the new repo. Its `input_win.go` (9 KB) and `input_linux.go` (13 KB) hold working keycode
 tables worth mining in M3 and M7.
 
-> **[ ] Outstanding — do this once.** That clone was made *before* the rename, so its `origin` is
+> **[x] Fixed.** That clone was made *before* the rename, so its `origin` was
 > `git@github.com:CipherSnowden/muxdeck.git` — which now points at the **new** repo. A stray
-> `git push` from `F:\reference\muxdeck-legacy` would push legacy Go history into this project.
+> `git push` from `F:\reference\muxdeck-legacy` would have pushed legacy Go history into this
+> project. Repointed and verified to resolve against the archived repository:
 >
 > ```powershell
 > git -C F:\reference\muxdeck-legacy remote set-url origin git@github.com:CipherSnowden/muxdeck-legacy.git
