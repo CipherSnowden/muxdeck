@@ -178,15 +178,20 @@ Broadcast to subscribers uses `tokio::sync::broadcast`; each socket task holds a
 
 Via the `directories` crate: `ProjectDirs::from("in", "redoimagined", "MuxDeck")`.
 
-| Platform | Path |
-| --- | --- |
-| Windows | `%APPDATA%\in.redoimagined\MuxDeck\config\` |
-| macOS | `~/Library/Application Support/in.redoimagined.MuxDeck/` |
-| Linux | `~/.config/muxdeck/` |
+| Platform | Path | Verified |
+| --- | --- | --- |
+| Windows | `%APPDATA%\redoimagined\MuxDeck\config\` | ✅ M2, on this machine |
+| macOS | `~/Library/Application Support/in.redoimagined.MuxDeck/` | ❌ no hardware yet |
+| Linux | `~/.config/muxdeck/` | ❌ no hardware yet |
 
-**These paths are an assumption, not a verified fact.** During M2, print the resolved
-`config_dir()` on each platform and correct this table to match what the crate actually emits.
-Do not trust what is written here over what the crate returns.
+**The Windows path was wrong until M2 corrected it.** It was documented as
+`%APPDATA%\in.redoimagined\MuxDeck\config\`, but the `directories` crate ignores the qualifier on
+Windows and uses `{Organization}\{Application}` only — so the `in.` prefix never appears. The
+qualifier *is* used on macOS, which is why that row keeps it.
+
+The macOS and Linux rows remain predictions. Check them with `muxdeckd --print-config-dir` on the
+first run on each platform and correct this table rather than trusting it — that flag exists for
+exactly this purpose.
 
 ```
 identity.key       host Ed25519 private key   (0600)

@@ -266,9 +266,39 @@ which names exist, which is the specific failure §5 exists to prevent).
 
 ---
 
-## [ ] M2 — Engine core: TLS, handshake, pairing
+## [x] M2 — Engine core: TLS, handshake, pairing
 
 No input injection yet. This is the security backbone.
+
+**Done.** Outcome notes:
+
+- 69 tests: 45 unit, 9 integration over a real TLS WebSocket on port 0, plus the M1 protocol
+  suites. Verified end to end against a running daemon with `examples/probe.rs` — pair, then
+  authenticate on a fresh socket, then five pings at 0.11–0.21 ms over loopback.
+- **`docs/ENGINE.md` §6 was wrong about the Windows config path** and has been corrected. The
+  `directories` crate ignores the qualifier on Windows, so the real path is
+  `%APPDATA%\redoimagined\MuxDeck\config\` with no `in.` prefix. macOS and Linux are still
+  predictions — check them with the new `--print-config-dir` flag when hardware exists.
+- Secret files are owner-only, confirmed with `icacls`: inheritance stripped, a single
+  `<user>:(F)` entry, nobody else named.
+- `icacls` is shelled out to rather than calling `SetNamedSecurityInfoW`, so the whole engine
+  keeps `#![forbid(unsafe_code)]` — the plan had allowed an exception for Win32 FFI and it turned
+  out not to be needed. The trade-off is recorded in `secret_file.rs`.
+- Logs were grepped for the admin token and the host private key at DEBUG level: neither appears.
+  Only `host_id` and the certificate fingerprint are logged, both public by design.
+- mDNS advertises `ENIGMA-ENTROPY._muxdeck._tcp.local.` with `v`, `id`, `name` and `fp`.
+
+Two things worth knowing for later:
+
+- **`std::net::TcpListener` must be set non-blocking before tokio adopts it.** Without it every
+  connection hangs at the TLS handshake with no error at all — the tests simply never returned.
+  Costly to diagnose, trivial to fix, easy to reintroduce.
+- **`capabilities` is currently all-false** because there is no input backend yet. M3 replaces the
+  placeholder in `Engine::capabilities` with real `InputBackend::preflight` results.
+
+Not in scope and deliberately left: `input.*`, `profile.*`, `action.*`, `settings.*` and
+`telemetry.*` are refused with `UNKNOWN_OP` until their milestones. The capability matrix is
+already enforced for all of them, so those milestones add handlers, not permissions.
 
 > Implement milestone M2. Read docs/ENGINE.md and docs/ARCHITECTURE.md §5 first.
 >

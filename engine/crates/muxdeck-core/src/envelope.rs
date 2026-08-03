@@ -84,6 +84,20 @@ pub enum Op {
 }
 
 impl Op {
+    pub fn of(op: KnownOp) -> Self {
+        Op::Known(op)
+    }
+
+    pub fn parse(wire: &str) -> Self {
+        match KnownOp::ALL
+            .iter()
+            .find(|candidate| candidate.as_str() == wire)
+        {
+            Some(op) => Op::Known(*op),
+            None => Op::Unknown(wire.to_string()),
+        }
+    }
+
     /// The wire string, whether or not this op is one we know.
     pub fn as_str(&self) -> &str {
         match self {
@@ -322,4 +336,26 @@ pub enum ErrorCode {
     Disabled,
     /// Engine bug. Always logged with a trace ID.
     Internal,
+}
+
+impl ErrorCode {
+    /// The wire string. Serde already knows this mapping; this exposes it for logging and
+    /// error messages, where going through `serde_json` would be absurd.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ErrorCode::BadRequest => "BAD_REQUEST",
+            ErrorCode::UnsupportedVersion => "UNSUPPORTED_VERSION",
+            ErrorCode::UnknownOp => "UNKNOWN_OP",
+            ErrorCode::NotAuthenticated => "NOT_AUTHENTICATED",
+            ErrorCode::NotAuthorized => "NOT_AUTHORIZED",
+            ErrorCode::PairingClosed => "PAIRING_CLOSED",
+            ErrorCode::BadCode => "BAD_CODE",
+            ErrorCode::UnknownDevice => "UNKNOWN_DEVICE",
+            ErrorCode::BadSignature => "BAD_SIGNATURE",
+            ErrorCode::InjectionFailed => "INJECTION_FAILED",
+            ErrorCode::NotFound => "NOT_FOUND",
+            ErrorCode::Disabled => "DISABLED",
+            ErrorCode::Internal => "INTERNAL",
+        }
+    }
 }
