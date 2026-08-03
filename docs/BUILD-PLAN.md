@@ -439,8 +439,27 @@ trip per attempt.
   Xcode project, which is what SPM reads. `docs/CLIENT.md` §4 now says so, because the reflex to
   add one is natural and wrong.
 
+- **Dart-signs-Rust-verifies is now covered, without a phone.**
+  `apps/client/test/live_engine_test.dart` runs the real `LanTransport` against a real running
+  `muxdeckd`. It confirmed three things nothing else could: the pin accepts the engine's actual
+  `rcgen` certificate, a wrong pin is *rejected* against that same certificate (so the pin is
+  load-bearing rather than incidentally passing), and `ed25519-dalek`'s `verify_strict` accepts
+  signatures made by `package:cryptography` for both `pairProofMessage` and
+  `sessionAuthMessage`. The engine's registry shows the Dart client paired:
+  `d_62fdc013fe5fe059 live_engine_test android`.
+
+  M1's fixtures proved the signing *buffers* match byte-for-byte; that says both sides build the
+  same bytes, not that a signature over them verifies. This closes the gap.
+
+  It skips unless `MUXDECK_LIVE_ADDR` and `MUXDECK_LIVE_FP` are set, so `flutter test` stays
+  hermetic and CI is unaffected — a runner has no engine, and standing one up there would test
+  the runner's network stack rather than the protocol. Run instructions are in the file's own
+  header. Note `flutter_test` installs a mock `HttpClient`; the test clears
+  `HttpOverrides.global` or every socket answers "Unsupported operation: Mocked response".
+
 Still to do, and it needs hardware: run through the seven-step checklist in the plan on a
-physical Android device. Discovery is the only step that cannot be verified any other way.
+physical Android device. **Discovery is now the only step that cannot be verified any other
+way** — pairing, the handshake, pinning and input dispatch are all covered above.
 
 Two deviations from `docs/CLIENT.md` §5, both recorded there: no `core/result.dart` (Riverpod's
 `AsyncValue` already models error state, so a parallel `Result` would be a second channel to keep
