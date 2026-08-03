@@ -4,13 +4,13 @@
 /// device, and only during pairing. `docs/ARCHITECTURE.md` §5.1.
 library;
 
+import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../../core/errors.dart';
 
 /// Where the 32-byte Ed25519 seed lives in secure storage.
 const _seedKey = 'muxdeck.device.seed';

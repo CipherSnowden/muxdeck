@@ -7,9 +7,9 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:muxdeck_protocol/muxdeck_protocol.dart';
+import '../envelope.dart';
 
-import '../../core/errors.dart';
+import 'errors.dart';
 import 'transport.dart';
 
 /// How long to wait for a response before giving up on it.

@@ -10,12 +10,12 @@
 /// providers below, which is also how the whole client is tested without a socket.
 library;
 
+import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'data/hosts/host_record.dart';
 import 'data/hosts/host_store.dart';
 import 'data/identity/device_identity.dart';
-import 'data/transport/lan_transport.dart';
 import 'domain/discovery/discovery_controller.dart';
 import 'domain/pairing/pairing_controller.dart';
 import 'domain/session/session_controller.dart';
@@ -66,6 +66,6 @@ final discoveryProvider = NotifierProvider<DiscoveryController, DiscoveryState>(
   DiscoveryController.new,
 );
 
-final pairingProvider = NotifierProvider<PairingController, PairingState>(
+final pairingProvider = NotifierProvider<PairingController, PairingFlowState>(
   PairingController.new,
 );

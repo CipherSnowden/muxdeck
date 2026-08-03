@@ -8,7 +8,7 @@ import 'package:crypto/crypto.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import '../../core/errors.dart';
+import 'errors.dart';
 import 'transport.dart';
 
 /// How long to wait for the socket before giving up.

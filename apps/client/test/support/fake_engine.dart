@@ -24,9 +24,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
-import 'package:muxdeck_client/core/errors.dart';
 import 'package:muxdeck_client/data/identity/device_identity.dart';
-import 'package:muxdeck_client/data/transport/transport.dart';
 import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 
 /// A well-formed but obviously invented certificate fingerprint — the one from

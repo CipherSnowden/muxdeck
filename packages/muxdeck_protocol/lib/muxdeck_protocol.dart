@@ -18,3 +18,15 @@ export 'src/session.dart';
 export 'src/settings.dart';
 export 'src/signing.dart';
 export 'src/telemetry.dart';
+
+// Speaking the protocol, not just describing it. Both apps connect the same way — the mobile
+// deck over the LAN and the desktop panel over loopback — and certificate pinning in particular
+// must exist exactly once: two copies is how one of them gets a security fix and the other
+// quietly does not. `docs/SERVER.md` §1.
+//
+// All of this is plain Dart, so the package stays Flutter-free and its CI job keeps running on
+// the Dart SDK alone in seconds.
+export 'src/net/errors.dart';
+export 'src/net/lan_transport.dart';
+export 'src/net/protocol_client.dart';
+export 'src/net/transport.dart';

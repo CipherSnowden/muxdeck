@@ -35,10 +35,7 @@ import 'dart:io' as io;
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:muxdeck_client/core/errors.dart';
 import 'package:muxdeck_client/data/identity/device_identity.dart';
-import 'package:muxdeck_client/data/transport/lan_transport.dart';
-import 'package:muxdeck_client/data/transport/protocol_client.dart';
 import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 
 void main() {

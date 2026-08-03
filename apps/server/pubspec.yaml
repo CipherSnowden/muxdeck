@@ -34,6 +34,16 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  flutter_riverpod: ^3.4.2
+  web_socket_channel: ^3.0.3
+  window_manager: ^0.5.2
+  tray_manager: ^0.5.3
+  qr_flutter: ^4.1.0
+  shared_preferences: ^2.5.5
+  crypto: ^3.0.7
+  path: ^1.9.1
+  muxdeck_protocol:
+    path: ../../packages/muxdeck_protocol
 
 dev_dependencies:
   flutter_test:

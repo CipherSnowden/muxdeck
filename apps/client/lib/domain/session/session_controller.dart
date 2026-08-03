@@ -8,11 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 
-import '../../core/errors.dart';
 import '../../data/hosts/host_record.dart';
 import '../../data/identity/device_identity.dart';
-import '../../data/transport/protocol_client.dart';
-import '../../data/transport/transport.dart';
 import '../../providers.dart';
 import 'session_state.dart';
 

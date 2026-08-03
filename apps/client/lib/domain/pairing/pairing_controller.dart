@@ -6,34 +6,31 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 
-import '../../core/errors.dart';
 import '../../data/hosts/host_record.dart';
 import '../../data/hosts/host_store.dart';
 import '../../data/identity/device_identity.dart';
-import '../../data/transport/protocol_client.dart';
-import '../../data/transport/transport.dart';
 import '../../providers.dart';
 import '../session/session_controller.dart';
 
-sealed class PairingState {
-  const PairingState();
+sealed class PairingFlowState {
+  const PairingFlowState();
 }
 
-class PairingIdle extends PairingState {
+class PairingIdle extends PairingFlowState {
   const PairingIdle();
 }
 
-class PairingInProgress extends PairingState {
+class PairingInProgress extends PairingFlowState {
   const PairingInProgress();
 }
 
-class PairingSucceeded extends PairingState {
+class PairingSucceeded extends PairingFlowState {
   const PairingSucceeded(this.host);
 
   final HostRecord host;
 }
 
-class PairingFailed extends PairingState {
+class PairingFailed extends PairingFlowState {
   const PairingFailed(this.error);
 
   final AppError error;
@@ -44,13 +41,13 @@ typedef PairingTransportFactory =
     Transport Function({required String address, required String fingerprint});
 
 /// Runs the pairing exchange.
-class PairingController extends Notifier<PairingState> {
+class PairingController extends Notifier<PairingFlowState> {
   PairingTransportFactory get _transportFactory => ref.read(pairingTransportFactoryProvider);
   DeviceIdentityStore get _identityStore => ref.read(deviceIdentityStoreProvider);
   HostStore get _hostStore => ref.read(hostStoreProvider);
 
   @override
-  PairingState build() => const PairingIdle();
+  PairingFlowState build() => const PairingIdle();
 
   /// Pairs using a scanned QR payload.
   Future<void> pairFromQr(String rawPayload) async {

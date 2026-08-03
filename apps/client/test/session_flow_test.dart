@@ -10,7 +10,6 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:muxdeck_client/core/errors.dart';
 import 'package:muxdeck_client/data/hosts/host_record.dart';
 import 'package:muxdeck_client/data/hosts/host_store.dart';
 import 'package:muxdeck_client/data/identity/device_identity.dart';

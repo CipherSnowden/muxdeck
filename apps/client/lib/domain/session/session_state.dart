@@ -3,7 +3,6 @@ library;
 
 import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 
-import '../../core/errors.dart';
 
 sealed class SessionState {
   const SessionState();
