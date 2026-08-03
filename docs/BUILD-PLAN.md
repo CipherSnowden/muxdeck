@@ -414,6 +414,32 @@ realistically, and mDNS is the part most likely to break. iOS cannot be verified
 get `NSBonjourServices` right the first time, because finding that mistake later costs a CI round
 trip per attempt.
 
+**Code complete; awaiting on-device verification.** Outcome notes:
+
+- 40 client tests, clean analyze. The integration suite runs against a `FakeEngine` that performs
+  **real `Ed25519().verify()`** against `sessionAuthMessage` and `pairProofMessage`, so a green
+  run proves the Dart client builds byte-identical signing input to the Rust engine — the one
+  disagreement that authenticates nothing and leaves no diagnosable symptom.
+- Package APIs were read from source in the pub cache rather than assumed. Five findings changed
+  the implementation; they are recorded in `docs/CLIENT.md` §3, §4 and §4.1 because each of them
+  fails *silently*.
+- **A security hole in the spec's own pinning snippet was closed.** `badCertificateCallback`
+  fires only for certificates that fail normal validation, so one chaining to a public CA would
+  skip the check entirely and be accepted — the pin simply would not be consulted.
+  `SecurityContext(withTrustedRoots: false)` makes the callback the only decider. §3.
+- **A real bug was caught by the new tests**: `decodeHostRecords` returned `const []` on the
+  empty path, and `HostStore.save` mutates that list — so the very first pairing on a fresh
+  install failed with "Cannot remove from an unmodifiable list". Fixed at the source so every
+  caller benefits.
+
+Still to do, and it needs hardware: run through the seven-step checklist in the plan on a
+physical Android device. Discovery is the only step that cannot be verified any other way.
+
+Two deviations from `docs/CLIENT.md` §5, both recorded there: no `core/result.dart` (Riverpod's
+`AsyncValue` already models error state, so a parallel `Result` would be a second channel to keep
+in sync), and no `packages/muxdeck_icons` yet — the M4 grid is hardcoded, so there is no
+`String → IconData` lookup to do and the package would have no caller until M6.
+
 ---
 
 ## [ ] M5 — Desktop control panel

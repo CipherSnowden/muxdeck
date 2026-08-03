@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Muxdeck Client</string>
+	<string>MuxDeck</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -66,5 +66,32 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
+	<!-- Local network access. Both keys are required together on iOS 14+. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>MuxDeck finds your computer on the local network to send button presses.</string>
+
+	<!-- WITHOUT THIS, mDNS DISCOVERY RETURNS NOTHING AND THROWS NO ERROR.
+	     iOS 14+ requires every browsed service type to be declared here in advance; an
+	     undeclared type is not refused, it simply never resolves. This is the single most
+	     common cause of "discovery doesn't work" on iOS.
+
+	     The bare `_muxdeck._tcp` form, with no `.local.` suffix — it must match the type string
+	     passed to bonsoir, because the platform supplies the domain itself. The engine
+	     advertising `_muxdeck._tcp.local.` on the wire is correct and unrelated.
+	     See docs/CLIENT.md §4.1. -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_muxdeck._tcp</string>
+	</array>
+
+	<!-- Pairing scans a QR code shown by the desktop app. -->
+	<key>NSCameraUsageDescription</key>
+	<string>MuxDeck uses the camera to scan the pairing QR code shown on your computer.</string>
+
+	<!-- Split View on iPad. A deck alongside the app being controlled is a normal way to use
+	     this, so full-screen-only would be a poor default. -->
+	<key>UIRequiresFullScreen</key>
+	<false/>
 </dict>
 </plist>

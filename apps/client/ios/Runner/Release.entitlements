@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required by flutter_secure_storage, and its absence fails silently: Keychain writes
+	     appear to succeed and persist nothing, with no exception and no log. The device's
+	     Ed25519 identity would then not survive a restart, and the device would unpair itself
+	     with nothing to diagnose from. An empty array is correct — the app shares its Keychain
+	     with nothing, it just needs the capability present. See docs/CLIENT.md §4. -->
+	<key>keychain-access-groups</key>
+	<array/>
+</dict>
+</plist>

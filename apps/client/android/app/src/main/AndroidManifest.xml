@@ -1,8 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- bonsoir and mobile_scanner declare the multicast and camera permissions in their own
+         manifests, so these merge automatically. Listing them here documents what the app
+         actually needs rather than adding anything. docs/CLIENT.md §4. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
+
+    <!-- allowBackup="false" is required, and its absence fails silently and late. With
+         automatic backup on, Google Drive restores flutter_secure_storage's encrypted blob onto
+         a device whose KeyStore does not hold the matching key, and every read then throws
+         InvalidKeyException. It only shows up after a device migration, and it is unrecoverable
+         in the field. A deck has nothing worth backing up anyway. docs/CLIENT.md §4. -->
     <application
-        android:label="muxdeck_client"
+        android:label="MuxDeck"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
