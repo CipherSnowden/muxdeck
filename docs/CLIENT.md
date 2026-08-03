@@ -18,13 +18,15 @@ Note there is no `web` in `--platforms`. Do not add it later.
 
 | Purpose | Package |
 | --- | --- |
-| state management | `flutter_riverpod` + `riverpod_annotation` |
+| state management | `flutter_riverpod` |
 | WebSocket | `web_socket_channel` |
 | mDNS discovery | `bonsoir` |
 | QR scanning | `mobile_scanner` |
 | secure key storage | `flutter_secure_storage` |
 | Ed25519 signing | `cryptography` |
+| SHA-256 (certificate fingerprints) | `crypto` |
 | local settings | `shared_preferences` |
+| keep screen awake | `wakelock_plus` |
 | haptics | `flutter/services` (`HapticFeedback`) — no package needed |
 | shared protocol types | `muxdeck_protocol` (path dep on `../../packages/muxdeck_protocol`) |
 
@@ -32,13 +34,51 @@ Riverpod over Provider because the connection lifecycle is genuinely a graph of 
 state (discovery → selected host → socket → session → profile) and Riverpod's `AsyncValue` and
 auto-dispose model handle that without hand-rolled listeners.
 
+**Providers are hand-written; there is no `riverpod_annotation` and no `build_runner`.** The
+graph is about eight providers, each a few lines, and codegen would add a build step and a watch
+process to save very little — the same reasoning that kept `build_runner` out of
+`packages/muxdeck_protocol` in M1. There is no code generation anywhere in this repository.
+
+**Modern providers only. No legacy providers, ever.** Riverpod 3 splits its API in two: the
+current one, and a legacy set kept for migrating old codebases. Use:
+
+| Need | Use |
+| --- | --- |
+| mutable state with methods | `Notifier<T>` + `NotifierProvider<N, T>(N.new)` |
+| async state with methods | `AsyncNotifier<T>` + `AsyncNotifierProvider<N, T>(N.new)` |
+| a stream with methods | `StreamNotifier<T>` + `StreamNotifierProvider<N, T>(N.new)` |
+| read-only derived value | `Provider`, `FutureProvider`, `StreamProvider` |
+
+Never `StateProvider`, `StateNotifierProvider` or `ChangeNotifierProvider`. They are the legacy
+set, they carry `state_notifier` along with them, and they encourage putting mutation logic in
+widgets rather than in a notifier.
+
+This is self-enforcing rather than a rule to remember: Riverpod 3 does not export the legacy
+providers from `package:flutter_riverpod/flutter_riverpod.dart` at all — they live behind a
+separate `legacy.dart` import. **Do not import `legacy.dart`.** If a legacy provider appears in a
+diff, it arrived with an import that should not be there.
+
+The canonical shape, from the package's own documentation:
+
+```dart
+final counterProvider = NotifierProvider<Counter, int>(Counter.new);
+
+class Counter extends Notifier<int> {
+  @override
+  int build() => 0;          // initial state
+
+  void increment() => state++;
+}
+```
+
 ## 3. Certificate pinning — the load-bearing detail
 
 The engine uses a self-signed certificate, so normal TLS validation will fail. Do **not**
 blanket-accept bad certificates. Accept exactly one fingerprint:
 
 ```dart
-final httpClient = HttpClient()
+// withTrustedRoots: false is load-bearing — see below.
+final httpClient = HttpClient(context: SecurityContext(withTrustedRoots: false))
   ..badCertificateCallback = (X509Certificate cert, String host, int port) {
     final actual = sha256.convert(cert.der).toString();
     return actual == expectedFingerprint;   // stored at pairing time
@@ -51,7 +91,36 @@ final channel = IOWebSocketChannel.connect(uri, customClient: httpClient);
 A mismatch is a hard failure with a clear "this host's identity changed" message — never a
 silent retry. This is the entire reason the web platform is excluded: browsers cannot do this.
 
+**`SecurityContext(withTrustedRoots: false)` is not optional.** `badCertificateCallback` fires
+only for certificates that fail normal validation. A certificate that *does* chain to a trusted
+root skips the callback entirely and is accepted — so without this, the fingerprint check is
+simply not consulted on the one path where it would matter, and the pin is not a pin. Disabling
+the trust store means nothing can ever chain, so the callback always runs and the fingerprint is
+the only thing that decides. Losing CA validation costs nothing here: the host has no DNS name
+and no CA, which is why it is self-signed in the first place.
+
+Two more details worth knowing before debugging this:
+
+- Hash the **DER**, not the PEM. `X509Certificate.der` is a `Uint8List`; `sha256.convert(...)`
+  from `package:crypto` renders lowercase hex with no separators via `toString()`, which is
+  exactly the representation `docs/PROTOCOL.md` §1 specifies. Hashing the PEM yields a value
+  nothing else in the system agrees with.
+- `web_socket_channel` 3.x wraps connection failures in `WebSocketChannelException`. The real
+  cause — the `HandshakeException` a rejected pin produces — is in its `.inner`. Surface that as
+  a fingerprint mismatch rather than a generic "could not connect", or the user is told to check
+  their Wi-Fi when their host's identity has changed.
+
 ## 4. Platform configuration
+
+### Version floors
+
+Taken from the dependencies' own gradle files and podspecs, not guessed. Raising these is not
+optional — the build fails, or worse, succeeds and misbehaves.
+
+| Platform | Floor | Imposed by |
+| --- | --- | --- |
+| Android | `minSdk 23` | `flutter_secure_storage` 10.x, `mobile_scanner` 7.x |
+| iOS | deployment target `13.0` | `bonsoir_darwin` (the highest of the three; `mobile_scanner` and `flutter_secure_storage_darwin` want 12.0) |
 
 ### iOS — `ios/Runner/Info.plist`
 
@@ -68,8 +137,26 @@ silent retry. This is the entire reason the web platform is excluded: browsers c
 and throws no error.** This is the single most common failure in this kind of app. If discovery
 "doesn't work" on iOS, check this first.
 
+Note the form: `_muxdeck._tcp`, **without** a `.local.` suffix, matching the type string passed
+to `bonsoir`. The domain is supplied separately by the platform, and the engine advertising
+`_muxdeck._tcp.local.` on the wire is correct and unrelated. See §4.1 below — getting this wrong
+in the other direction is just as silent.
+
 Also set `UISupportedInterfaceOrientations` to allow landscape on iPad, and enable
 `UIRequiresFullScreen = false` so Split View works.
+
+**Keychain entitlement — required, and silent when missing.** Add an empty
+`keychain-access-groups` array to **both** `ios/Runner/DebugProfile.entitlements` and
+`ios/Runner/Release.entitlements`:
+
+```xml
+<key>keychain-access-groups</key>
+<array/>
+```
+
+Without it, `flutter_secure_storage` writes appear to succeed and persist nothing — no
+exception, no log. The device identity keypair silently fails to survive a restart, and the
+device unpairs itself with no diagnosis available on the client.
 
 ### Android — `android/app/src/main/AndroidManifest.xml`
 
@@ -80,8 +167,33 @@ Also set `UISupportedInterfaceOrientations` to allow landscape on iPad, and enab
 <uses-permission android:name="android.permission.CAMERA"/>
 ```
 
-`bonsoir` handles the `MulticastLock` internally, but verify it is released when discovery stops
-or you will drain the battery.
+`bonsoir` and `mobile_scanner` declare the multicast and camera permissions in their own
+manifests, so these merge automatically; listing them here documents the dependency rather than
+adding anything. `bonsoir` also creates the `MulticastLock` itself, reference-counted, acquiring
+it on discovery start and releasing it on stop — but verify that release actually happens on your
+own teardown path, or you will drain the battery.
+
+**`android:allowBackup="false"` on `<application>` — required.** With Android's automatic backup
+enabled, Google Drive restores `flutter_secure_storage`'s encrypted blob onto a device whose
+KeyStore does not hold the matching key, and every subsequent read throws
+`InvalidKeyException: Failed to unwrap key`. It is the most common production failure for that
+plugin, it only appears after a device migration, and it is unrecoverable in the field. The
+alternative — excluding just the plugin's shared-preferences file via `android:fullBackupContent`
+— is more precise but more to get wrong; a deck has nothing else worth backing up.
+
+### 4.1 The service type string, on both sides
+
+Three places name the service, and they do **not** all use the same form:
+
+| Where | Value |
+| --- | --- |
+| Engine advertisement (`discovery.rs`) | `_muxdeck._tcp.local.` |
+| `BonsoirDiscovery(type: …)` in the client | `_muxdeck._tcp` |
+| iOS `NSBonjourServices` | `_muxdeck._tcp` |
+
+The client and the plist take the bare type because the platform appends the `local.` domain
+itself. Passing the fully-qualified form to `bonsoir` is **silently rewritten** to a default
+service type by its normalizer, and discovery then finds nothing while reporting no error.
 
 ## 5. Directory structure
 
@@ -90,8 +202,7 @@ lib/
 ├── main.dart
 ├── app.dart                       root widget, theme, router
 ├── core/
-│   ├── result.dart                Result<T, AppError>
-│   ├── errors.dart
+│   ├── errors.dart                sealed AppError
 │   └── logging.dart
 ├── data/
 │   ├── identity/
@@ -125,7 +236,14 @@ lib/
 ```
 
 **`Transport` is an interface even though there is one implementation.** It costs almost nothing
-now and it is the seam where USB or BLE would be added if that decision is ever revisited.
+now and it is the seam where USB or BLE would be added if that decision is ever revisited. It
+also earns its keep immediately: a `FakeTransport` is what lets the whole client — handshake,
+pairing, dispatch — be tested without a socket, a certificate or a running engine.
+
+**There is no `Result<T, AppError>`.** Riverpod's `AsyncValue` already models loading, data and
+error, so a parallel result type would be a second error channel to keep in sync with the first.
+Failures are thrown as sealed `AppError` subclasses and surface through `AsyncValue.error`, which
+is what the UI already switches on.
 
 ### Icons
 
