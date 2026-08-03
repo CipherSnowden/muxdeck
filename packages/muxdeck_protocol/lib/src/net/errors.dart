@@ -62,7 +62,9 @@ class PairingRejected extends AppError {
 /// host record.
 class NotPaired extends AppError {
   const NotPaired()
-    : super('This device is no longer paired with that host. Pair it again to continue.');
+    : super(
+        'This device is no longer paired with that host. Pair it again to continue.',
+      );
 }
 
 /// The socket failed for a reason that is not one of the above.

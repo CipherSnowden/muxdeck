@@ -48,6 +48,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # Matches protocol.yml. Without it, formatting drifts here unnoticed and only surfaces
+      # when a file moves into a package whose CI does check — which is exactly how it was
+      # discovered.
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+
       - name: Analyze
         run: flutter analyze
 

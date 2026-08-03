@@ -67,7 +67,10 @@ void main() {
     });
 
     test("the pin accepts the engine's real certificate", () async {
-      final transport = LanTransport(uri: uri(), expectedFingerprint: fingerprint);
+      final transport = LanTransport(
+        uri: uri(),
+        expectedFingerprint: fingerprint,
+      );
 
       await transport.connect();
       expect(
@@ -83,7 +86,10 @@ void main() {
       // would have been accepted anyway.
       final transport = LanTransport(uri: uri(), expectedFingerprint: '0' * 64);
 
-      await expectLater(transport.connect(), throwsA(isA<FingerprintMismatch>()));
+      await expectLater(
+        transport.connect(),
+        throwsA(isA<FingerprintMismatch>()),
+      );
       await transport.close();
     }, skip: skipReason);
 
@@ -91,11 +97,16 @@ void main() {
       // The assertion this file exists for. Everything above could pass with two
       // implementations that agree with each other rather than with the specification.
       if (code.isEmpty) {
-        fail('set MUXDECK_LIVE_CODE from `muxdeckd pair begin` to run this leg');
+        fail(
+          'set MUXDECK_LIVE_CODE from `muxdeckd pair begin` to run this leg',
+        );
       }
 
       // --- pair: ed25519-dalek verifies pairProofMessage ---
-      final pairing = LanTransport(uri: uri(), expectedFingerprint: fingerprint);
+      final pairing = LanTransport(
+        uri: uri(),
+        expectedFingerprint: fingerprint,
+      );
       await pairing.connect();
       final pairClient = ProtocolClient(pairing);
 
@@ -114,7 +125,8 @@ void main() {
       expect(
         paired['device_id'],
         identity.deviceId,
-        reason: 'both languages must derive the same device id from the same public key',
+        reason:
+            'both languages must derive the same device id from the same public key',
       );
       final hostId = paired['host_id'] as String;
 
@@ -122,7 +134,10 @@ void main() {
       await pairing.close();
 
       // --- authenticate: verify_strict accepts, on a fresh socket as a real deck would ---
-      final session = LanTransport(uri: uri(), expectedFingerprint: fingerprint);
+      final session = LanTransport(
+        uri: uri(),
+        expectedFingerprint: fingerprint,
+      );
       await session.connect();
       final client = ProtocolClient(session);
 
@@ -148,7 +163,8 @@ void main() {
       expect(
         ready['role'],
         'deck',
-        reason: 'verify_strict accepted a signature made by package:cryptography',
+        reason:
+            'verify_strict accepted a signature made by package:cryptography',
       );
 
       final pong = await client.request(KnownOp.systemPing, {

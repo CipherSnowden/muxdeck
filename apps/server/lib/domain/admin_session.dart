@@ -155,7 +155,9 @@ class AdminSession extends Notifier<AdminState> {
     // Credentials may have only just been written, so re-read before the second attempt.
     final refreshed = await readEngineCredentials() ?? credentials;
     if (!await _attach(refreshed)) {
-      state = const AdminEngineStopped('The engine is running but refused the connection.');
+      state = const AdminEngineStopped(
+        'The engine is running but refused the connection.',
+      );
     }
   }
 
@@ -290,7 +292,9 @@ class AdminSession extends Notifier<AdminState> {
   /// Opens a pairing window and returns the payload for the QR screen.
   Future<PairBeginResponse> beginPairing({int ttlSeconds = 120}) async {
     final client = _requireClient();
-    final response = await client.request(KnownOp.pairBegin, {'ttl_seconds': ttlSeconds});
+    final response = await client.request(KnownOp.pairBegin, {
+      'ttl_seconds': ttlSeconds,
+    });
     return PairBeginResponse.fromJson(response);
   }
 

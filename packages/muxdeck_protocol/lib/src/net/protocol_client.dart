@@ -24,7 +24,8 @@ class ProtocolClient {
     _subscription = _transport.frames.listen(
       _onFrame,
       onError: _failAllPending,
-      onDone: () => _failAllPending(const TransportFailed('The connection closed.')),
+      onDone: () =>
+          _failAllPending(const TransportFailed('The connection closed.')),
     );
   }
 
@@ -43,7 +44,10 @@ class ProtocolClient {
   ///
   /// Throws [EngineRefused] when the engine answers with an `err`, so callers can branch on the
   /// code rather than parsing envelopes themselves.
-  Future<Map<String, dynamic>> request(KnownOp op, Map<String, dynamic> payload) {
+  Future<Map<String, dynamic>> request(
+    KnownOp op,
+    Map<String, dynamic> payload,
+  ) {
     final id = 'c${_nextId++}';
     final completer = Completer<Map<String, dynamic>>();
     _pending[id] = completer;
@@ -67,7 +71,9 @@ class ProtocolClient {
       _requestTimeout,
       onTimeout: () {
         _pending.remove(id);
-        throw TransportFailed('${op.wire} timed out after ${_requestTimeout.inSeconds}s.');
+        throw TransportFailed(
+          '${op.wire} timed out after ${_requestTimeout.inSeconds}s.',
+        );
       },
     );
   }

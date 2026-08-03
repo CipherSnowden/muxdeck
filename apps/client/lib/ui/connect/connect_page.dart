@@ -33,9 +33,9 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
 
     ref.listen(sessionProvider, (previous, next) {
       if (next.isReady && mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(builder: (_) => const DeckPage()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute<void>(builder: (_) => const DeckPage()));
       }
     });
 
@@ -79,7 +79,8 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
         return const _Message(
           icon: Icons.error_outline,
           title: 'Automatic discovery is unavailable',
-          detail: 'Enter the address shown on your computer manually to connect.',
+          detail:
+              'Enter the address shown on your computer manually to connect.',
         );
       }
       return const _Message(
@@ -123,7 +124,9 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     // is exactly what the engine's immutable certificate guarantees.
     await ref
         .read(sessionProvider.notifier)
-        .connect(paired.copyWith(address: host.address, hostName: host.hostName));
+        .connect(
+          paired.copyWith(address: host.address, hostName: host.hostName),
+        );
   }
 
   void _showIdentityChanged(DiscoveredHost host) {
@@ -154,9 +157,9 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
   }
 
   Future<void> _openPairing() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const PairingPage()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const PairingPage()));
     if (mounted) {
       ref.invalidate(pairedHostsProvider);
       await ref.read(discoveryProvider.notifier).scan();
@@ -178,8 +181,16 @@ class _HostTile extends StatelessWidget {
         const Color(0xFFB3422F),
         'Identity changed — re-pair to continue',
       ),
-      _ when host.isPaired => (Icons.computer, const Color(0xFF1F8A70), host.address),
-      _ => (Icons.devices_other, const Color(0xFF4A5568), '${host.address} · not paired'),
+      _ when host.isPaired => (
+        Icons.computer,
+        const Color(0xFF1F8A70),
+        host.address,
+      ),
+      _ => (
+        Icons.devices_other,
+        const Color(0xFF4A5568),
+        '${host.address} · not paired',
+      ),
     };
 
     return Material(

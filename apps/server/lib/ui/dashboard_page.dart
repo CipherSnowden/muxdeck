@@ -20,7 +20,9 @@ class DashboardPage extends ConsumerWidget {
         title: 'Looking for the engine…',
         busy: true,
       ),
-      AdminNotInstalled(:final canInstall) => _NotInstalled(canInstall: canInstall),
+      AdminNotInstalled(:final canInstall) => _NotInstalled(
+        canInstall: canInstall,
+      ),
       AdminEngineStopped(:final detail) => _Stopped(detail: detail),
       AdminFailed(:final message) => _Centred(
         icon: Icons.gpp_bad,
@@ -51,7 +53,8 @@ class _Running extends ConsumerWidget {
 
         _StatusCard(
           title: 'Engine running',
-          subtitle: 'Version ${ready.engineVersion} · ${ready.hostPlatform.wire}',
+          subtitle:
+              'Version ${ready.engineVersion} · ${ready.hostPlatform.wire}',
           icon: Icons.check_circle,
           colour: const Color(0xFF1F8A70),
         ),
@@ -78,13 +81,19 @@ class _Running extends ConsumerWidget {
         ),
         const SizedBox(height: 24),
 
-        Text('What this host can do', style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          'What this host can do',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const SizedBox(height: 8),
         _CapabilityRow(
           label: 'Keyboard and text',
           available: ready.capabilities.textUnicode,
         ),
-        _CapabilityRow(label: 'Media keys', available: ready.capabilities.mediaKeys),
+        _CapabilityRow(
+          label: 'Media keys',
+          available: ready.capabilities.mediaKeys,
+        ),
         _CapabilityRow(label: 'Mouse', available: ready.capabilities.mouse),
         _CapabilityRow(
           label: 'Shell actions',
@@ -157,7 +166,8 @@ class _NotInstalled extends ConsumerWidget {
           : 'The muxdeckd program could not be found. It should sit next to this app.',
       action: canInstall
           ? FilledButton.icon(
-              onPressed: () => ref.read(adminSessionProvider.notifier).connect(),
+              onPressed: () =>
+                  ref.read(adminSessionProvider.notifier).connect(),
               icon: const Icon(Icons.play_arrow),
               label: const Text('Start the engine'),
             )
@@ -263,7 +273,9 @@ class _CapabilityRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            available ? Icons.check_circle_outline : Icons.remove_circle_outline,
+            available
+                ? Icons.check_circle_outline
+                : Icons.remove_circle_outline,
             size: 18,
             color: good ? const Color(0xFF1F8A70) : const Color(0xFFB3422F),
           ),
@@ -307,7 +319,10 @@ class _Centred extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (busy) const CircularProgressIndicator() else Icon(icon, size: 48),
+              if (busy)
+                const CircularProgressIndicator()
+              else
+                Icon(icon, size: 48),
               const SizedBox(height: 20),
               Text(
                 title,

@@ -38,7 +38,10 @@ Directory? engineConfigDirectory() {
 
 /// The credentials the panel needs to reach the engine.
 class EngineCredentials {
-  const EngineCredentials({required this.adminToken, required this.fingerprint});
+  const EngineCredentials({
+    required this.adminToken,
+    required this.fingerprint,
+  });
 
   /// Read from `admin.token`. **Never log this** — its file permissions are the entire boundary
   /// between this desktop user and any other local user (`docs/ARCHITECTURE.md` §5.4).
@@ -106,8 +109,18 @@ File? findEngineExecutable() {
   final candidates = <String>[
     p.join(p.dirname(Platform.resolvedExecutable), name),
     // A development tree: the panel runs from build/, the daemon from engine/target/debug.
-    p.join(p.dirname(Platform.resolvedExecutable), '..', '..', '..', '..', '..', 'engine',
-        'target', 'debug', name),
+    p.join(
+      p.dirname(Platform.resolvedExecutable),
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      'engine',
+      'target',
+      'debug',
+      name,
+    ),
   ];
 
   for (final candidate in candidates) {
@@ -115,7 +128,9 @@ File? findEngineExecutable() {
     if (file.existsSync()) return file;
   }
 
-  for (final entry in (Platform.environment['PATH'] ?? '').split(Platform.isWindows ? ';' : ':')) {
+  for (final entry in (Platform.environment['PATH'] ?? '').split(
+    Platform.isWindows ? ';' : ':',
+  )) {
     if (entry.isEmpty) continue;
     final file = File(p.join(entry, name));
     if (file.existsSync()) return file;

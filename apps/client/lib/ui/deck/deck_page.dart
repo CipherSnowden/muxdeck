@@ -25,7 +25,11 @@ const defaultDeckActions = <DeckAction?>[
   DeckAction(label: 'Undo', icon: Icons.undo, keys: ['CONTROL', 'Z']),
   DeckAction(label: 'Redo', icon: Icons.redo, keys: ['CONTROL', 'Y']),
 
-  DeckAction(label: 'Select all', icon: Icons.select_all, keys: ['CONTROL', 'A']),
+  DeckAction(
+    label: 'Select all',
+    icon: Icons.select_all,
+    keys: ['CONTROL', 'A'],
+  ),
   DeckAction(label: 'Save', icon: Icons.save, keys: ['CONTROL', 'S']),
   DeckAction(label: 'Find', icon: Icons.search, keys: ['CONTROL', 'F']),
   DeckAction(

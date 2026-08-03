@@ -63,12 +63,14 @@ void main() {
     test('a correct code pairs and stores the host', () async {
       engine.openPairingWindow('402913');
 
-      await container.read(pairingProvider.notifier).pair(
-        address: '192.168.1.42:47654',
-        hostId: engine.hostId,
-        fingerprint: engine.fingerprint,
-        code: '402913',
-      );
+      await container
+          .read(pairingProvider.notifier)
+          .pair(
+            address: '192.168.1.42:47654',
+            hostId: engine.hostId,
+            fingerprint: engine.fingerprint,
+            code: '402913',
+          );
 
       final state = container.read(pairingProvider);
       expect(state, isA<PairingSucceeded>());
@@ -90,12 +92,14 @@ void main() {
       // exists for.
       engine.openPairingWindow('111111');
 
-      await container.read(pairingProvider.notifier).pair(
-        address: '10.0.0.5:47654',
-        hostId: engine.hostId,
-        fingerprint: engine.fingerprint,
-        code: '111111',
-      );
+      await container
+          .read(pairingProvider.notifier)
+          .pair(
+            address: '10.0.0.5:47654',
+            hostId: engine.hostId,
+            fingerprint: engine.fingerprint,
+            code: '111111',
+          );
 
       expect(container.read(pairingProvider), isA<PairingSucceeded>());
     });
@@ -103,29 +107,37 @@ void main() {
     test('a wrong code is refused with an actionable message', () async {
       engine.openPairingWindow('402913');
 
-      await container.read(pairingProvider.notifier).pair(
-        address: '192.168.1.42:47654',
-        hostId: engine.hostId,
-        fingerprint: engine.fingerprint,
-        code: '000000',
-      );
+      await container
+          .read(pairingProvider.notifier)
+          .pair(
+            address: '192.168.1.42:47654',
+            hostId: engine.hostId,
+            fingerprint: engine.fingerprint,
+            code: '000000',
+          );
 
       final state = container.read(pairingProvider);
       expect(state, isA<PairingFailed>());
       expect((state as PairingFailed).error, isA<PairingRejected>());
       expect(state.error.message, contains('code'));
-      expect(hostStore.all(), isEmpty, reason: 'nothing may be stored on failure');
+      expect(
+        hostStore.all(),
+        isEmpty,
+        reason: 'nothing may be stored on failure',
+      );
     });
 
     test('pairing outside a window is refused', () async {
       engine.closePairingWindow();
 
-      await container.read(pairingProvider.notifier).pair(
-        address: '192.168.1.42:47654',
-        hostId: engine.hostId,
-        fingerprint: engine.fingerprint,
-        code: '402913',
-      );
+      await container
+          .read(pairingProvider.notifier)
+          .pair(
+            address: '192.168.1.42:47654',
+            hostId: engine.hostId,
+            fingerprint: engine.fingerprint,
+            code: '402913',
+          );
 
       final state = container.read(pairingProvider);
       expect(state, isA<PairingFailed>());
@@ -134,7 +146,9 @@ void main() {
     });
 
     test('a malformed QR payload never reaches the network', () async {
-      await container.read(pairingProvider.notifier).pairFromQr('https://example.com');
+      await container
+          .read(pairingProvider.notifier)
+          .pairFromQr('https://example.com');
 
       expect(container.read(pairingProvider), isA<PairingFailed>());
       expect(engine.receivedInput, isEmpty);
@@ -155,23 +169,27 @@ void main() {
       );
     }
 
-    test('the challenge signature verifies and the session reaches ready', () async {
-      final host = await paired();
+    test(
+      'the challenge signature verifies and the session reaches ready',
+      () async {
+        final host = await paired();
 
-      await container.read(sessionProvider.notifier).connect(host);
+        await container.read(sessionProvider.notifier).connect(host);
 
-      final state = container.read(sessionProvider);
-      expect(
-        state,
-        isA<SessionReady>(),
-        reason: 'a real Ed25519 verification against sessionAuthMessage must succeed',
-      );
+        final state = container.read(sessionProvider);
+        expect(
+          state,
+          isA<SessionReady>(),
+          reason:
+              'a real Ed25519 verification against sessionAuthMessage must succeed',
+        );
 
-      final ready = (state as SessionReady).ready;
-      expect(ready.role, Role.deck);
-      expect(ready.protocol, protocolVersion);
-      expect(ready.capabilities.shellActions, isFalse);
-    });
+        final ready = (state as SessionReady).ready;
+        expect(ready.role, Role.deck);
+        expect(ready.protocol, protocolVersion);
+        expect(ready.capabilities.shellActions, isFalse);
+      },
+    );
 
     test('an unpaired device is told it is not paired', () async {
       // Nothing registered with the engine, which is what a revoked device sees.
@@ -191,35 +209,41 @@ void main() {
       expect(
         (state as SessionFailed).error,
         isA<NotPaired>(),
-        reason: 'UNKNOWN_DEVICE must become a re-pair instruction, not a generic error',
+        reason:
+            'UNKNOWN_DEVICE must become a re-pair instruction, not a generic error',
       );
     });
 
-    test('a fingerprint mismatch is not treated as a retryable failure', () async {
-      container.dispose();
-      container = ProviderContainer(
-        overrides: [
-          hostStoreProvider.overrideWithValue(hostStore),
-          transportFactoryProvider.overrideWithValue(
-            (_) => const FailingTransport(FingerprintMismatch()),
-          ),
-        ],
-      );
+    test(
+      'a fingerprint mismatch is not treated as a retryable failure',
+      () async {
+        container.dispose();
+        container = ProviderContainer(
+          overrides: [
+            hostStoreProvider.overrideWithValue(hostStore),
+            transportFactoryProvider.overrideWithValue(
+              (_) => const FailingTransport(FingerprintMismatch()),
+            ),
+          ],
+        );
 
-      await container.read(sessionProvider.notifier).connect(
-        HostRecord(
-          hostId: engine.hostId,
-          hostName: engine.hostName,
-          address: '192.168.1.42:47654',
-          fingerprint: engine.fingerprint,
-          deviceId: 'd_0000000000000000',
-        ),
-      );
+        await container
+            .read(sessionProvider.notifier)
+            .connect(
+              HostRecord(
+                hostId: engine.hostId,
+                hostName: engine.hostName,
+                address: '192.168.1.42:47654',
+                fingerprint: engine.fingerprint,
+                deviceId: 'd_0000000000000000',
+              ),
+            );
 
-      final state = container.read(sessionProvider);
-      expect(state, isA<SessionFailed>());
-      expect((state as SessionFailed).error, isA<FingerprintMismatch>());
-    });
+        final state = container.read(sessionProvider);
+        expect(state, isA<SessionFailed>());
+        expect((state as SessionFailed).error, isA<FingerprintMismatch>());
+      },
+    );
 
     test('an unreachable host reports as unreachable', () async {
       container.dispose();
@@ -232,15 +256,17 @@ void main() {
         ],
       );
 
-      await container.read(sessionProvider.notifier).connect(
-        HostRecord(
-          hostId: 'h_0000000000000000',
-          hostName: 'ENIGMA-ENTROPY',
-          address: '192.168.1.99:47654',
-          fingerprint: fakeFingerprint,
-          deviceId: 'd_0000000000000000',
-        ),
-      );
+      await container
+          .read(sessionProvider.notifier)
+          .connect(
+            HostRecord(
+              hostId: 'h_0000000000000000',
+              hostName: 'ENIGMA-ENTROPY',
+              address: '192.168.1.99:47654',
+              fingerprint: fakeFingerprint,
+              deviceId: 'd_0000000000000000',
+            ),
+          );
 
       final state = container.read(sessionProvider);
       expect(state, isA<SessionFailed>());
@@ -265,7 +291,11 @@ void main() {
       expect(container.read(sessionProvider), isA<SessionReady>());
 
       final client = container.read(sessionProvider.notifier).client;
-      expect(client, isNotNull, reason: 'a ready session must expose its client');
+      expect(
+        client,
+        isNotNull,
+        reason: 'a ready session must expose its client',
+      );
 
       client!.fireAndForget(KnownOp.inputKeyCombo, {
         'keys': ['CONTROL', 'C'],

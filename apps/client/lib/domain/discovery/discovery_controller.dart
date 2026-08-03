@@ -52,7 +52,8 @@ class DiscoveredHost {
   /// Surfaced before connecting so the user gets "this host's identity changed" rather than a
   /// TLS error after a spinner.
   bool get fingerprintChanged =>
-      paired != null && paired!.fingerprint.toLowerCase() != fingerprint.toLowerCase();
+      paired != null &&
+      paired!.fingerprint.toLowerCase() != fingerprint.toLowerCase();
 }
 
 /// What the connect screen renders.
@@ -148,7 +149,9 @@ class DiscoveryController extends Notifier<DiscoveryState> {
   DiscoveredHost? _toHost(BonsoirService service) {
     final hostId = service.attributes[_txtHostId];
     final fingerprint = service.attributes[_txtFingerprint];
-    final address = service.hostAddresses.isNotEmpty ? service.hostAddresses.first : null;
+    final address = service.hostAddresses.isNotEmpty
+        ? service.hostAddresses.first
+        : null;
 
     if (hostId == null || fingerprint == null || address == null) return null;
 
@@ -163,7 +166,8 @@ class DiscoveryController extends Notifier<DiscoveryState> {
     );
   }
 
-  void _publish() => state = DiscoveryState(hosts: _mergedWithPaired(), isScanning: true);
+  void _publish() =>
+      state = DiscoveryState(hosts: _mergedWithPaired(), isScanning: true);
 
   /// Discovered hosts first, then paired hosts not currently visible.
   ///

@@ -40,8 +40,10 @@ class DeckGrid extends StatelessWidget {
 
         // Sizing is computed rather than delegated to GridView because the grid must fill the
         // space exactly and never overflow into a scroll.
-        final availableWidth = constraints.maxWidth - padding * 2 - gap * (columns - 1);
-        final availableHeight = constraints.maxHeight - padding * 2 - gap * (rows - 1);
+        final availableWidth =
+            constraints.maxWidth - padding * 2 - gap * (columns - 1);
+        final availableHeight =
+            constraints.maxHeight - padding * 2 - gap * (rows - 1);
         final cellWidth = availableWidth / columns;
         final cellHeight = availableHeight / rows;
 

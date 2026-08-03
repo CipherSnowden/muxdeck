@@ -9,7 +9,8 @@ import 'package:muxdeck_client/ui/deck/deck_grid.dart';
 /// Fills a grid so every cell is occupied.
 List<DeckAction?> _actions(int count) => List.generate(
   count,
-  (i) => DeckAction(label: 'Key $i', icon: Icons.circle, keys: ['DIGIT${i % 10}']),
+  (i) =>
+      DeckAction(label: 'Key $i', icon: Icons.circle, keys: ['DIGIT${i % 10}']),
 );
 
 /// Wraps the grid in a fixed-size surface, standing in for a device screen.
@@ -48,8 +49,13 @@ void main() {
 
   group('layout', () {
     for (final (columns, rows) in const [(5, 3), (6, 4), (8, 5)]) {
-      for (final (name, screen) in const [('phone', phone), ('tablet', tablet)]) {
-        testWidgets('$columns×$rows renders every button on $name', (tester) async {
+      for (final (name, screen) in const [
+        ('phone', phone),
+        ('tablet', tablet),
+      ]) {
+        testWidgets('$columns×$rows renders every button on $name', (
+          tester,
+        ) async {
           await tester.binding.setSurfaceSize(screen);
           addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -75,7 +81,9 @@ void main() {
       expect(find.byType(Scrollable), findsNothing);
     });
 
-    testWidgets('empty cells leave a gap rather than shifting the layout', (tester) async {
+    testWidgets('empty cells leave a gap rather than shifting the layout', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(phone);
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -117,12 +125,16 @@ void main() {
       );
       await tester.pump();
 
-      expect(pressed, ['Key 0'], reason: 'the action must fire before the finger lifts');
+      expect(pressed, [
+        'Key 0',
+      ], reason: 'the action must fire before the finger lifts');
 
       await gesture.up();
       await tester.pumpAndSettle();
 
-      expect(pressed, ['Key 0'], reason: 'releasing must not fire a second time');
+      expect(pressed, [
+        'Key 0',
+      ], reason: 'releasing must not fire a second time');
     });
 
     testWidgets('sends the canonical key names for the button', (tester) async {

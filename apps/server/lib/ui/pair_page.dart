@@ -44,7 +44,9 @@ class _PairDialogState extends ConsumerState<PairDialog> {
 
   Future<void> _begin() async {
     try {
-      final window = await ref.read(adminSessionProvider.notifier).beginPairing();
+      final window = await ref
+          .read(adminSessionProvider.notifier)
+          .beginPairing();
       if (!mounted) return;
       setState(() {
         _window = window;
@@ -76,7 +78,9 @@ class _PairDialogState extends ConsumerState<PairDialog> {
     // The engine pushes device.changed when a device pairs; the dialog closes on it rather than
     // making the user notice and dismiss it. `docs/SERVER.md` §6.
     ref.listen(adminSessionProvider, (previous, next) {
-      if (next is AdminReady && next.devices.length > _deviceCountAtOpen && mounted) {
+      if (next is AdminReady &&
+          next.devices.length > _deviceCountAtOpen &&
+          mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(
           context,
@@ -113,7 +117,10 @@ class _PairDialogState extends ConsumerState<PairDialog> {
         children: [
           const Icon(Icons.error_outline, size: 40),
           const SizedBox(height: 12),
-          Text('Could not open a pairing window.\n$error', textAlign: TextAlign.center),
+          Text(
+            'Could not open a pairing window.\n$error',
+            textAlign: TextAlign.center,
+          ),
         ],
       );
     }

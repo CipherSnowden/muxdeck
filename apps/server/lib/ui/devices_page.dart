@@ -17,7 +17,9 @@ class DevicesPage extends ConsumerWidget {
     final state = ref.watch(adminSessionProvider);
 
     if (state is! AdminReady) {
-      return const Center(child: Text('Connect to the engine to manage devices.'));
+      return const Center(
+        child: Text('Connect to the engine to manage devices.'),
+      );
     }
 
     if (state.devices.isEmpty) {
@@ -27,9 +29,14 @@ class DevicesPage extends ConsumerWidget {
           children: [
             const Icon(Icons.devices_other, size: 48),
             const SizedBox(height: 16),
-            Text('No devices paired yet', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'No devices paired yet',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 8),
-            const Text('Pair your phone or tablet to start using it as a deck.'),
+            const Text(
+              'Pair your phone or tablet to start using it as a deck.',
+            ),
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: () => _openPairing(context),
@@ -46,7 +53,10 @@ class DevicesPage extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Text('Paired devices', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Paired devices',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const Spacer(),
             FilledButton.icon(
               onPressed: () => _openPairing(context),
@@ -90,7 +100,9 @@ class DevicesPage extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB3422F)),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFB3422F),
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Remove'),
           ),
@@ -101,12 +113,14 @@ class DevicesPage extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
 
     try {
-      await ref.read(adminSessionProvider.notifier).revokeDevice(device.deviceId);
+      await ref
+          .read(adminSessionProvider.notifier)
+          .revokeDevice(device.deviceId);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not remove the device: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not remove the device: $e')),
+        );
       }
     }
   }

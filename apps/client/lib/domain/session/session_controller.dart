@@ -25,7 +25,8 @@ typedef TransportFactory = Transport Function(HostRecord host);
 /// Drives one connection from disconnected to ready, and keeps it alive.
 class SessionController extends Notifier<SessionState> {
   TransportFactory get _transportFactory => ref.read(transportFactoryProvider);
-  DeviceIdentityStore get _identityStore => ref.read(deviceIdentityStoreProvider);
+  DeviceIdentityStore get _identityStore =>
+      ref.read(deviceIdentityStoreProvider);
 
   Transport? _transport;
   ProtocolClient? _client;
@@ -80,11 +81,13 @@ class SessionController extends Notifier<SessionState> {
     DeviceIdentity identity,
     HostRecord host,
   ) async {
-    final helloResponse = await client.request(KnownOp.sessionHello, {
-      'device_id': identity.deviceId,
-      'client_version': clientVersion,
-      'platform': currentPlatform.wire,
-    }).catchError(_asAppError);
+    final helloResponse = await client
+        .request(KnownOp.sessionHello, {
+          'device_id': identity.deviceId,
+          'client_version': clientVersion,
+          'platform': currentPlatform.wire,
+        })
+        .catchError(_asAppError);
 
     final hello = HelloResponse.fromJson(helloResponse);
 
@@ -109,9 +112,9 @@ class SessionController extends Notifier<SessionState> {
     );
     final signature = await identity.sign(message);
 
-    final authResponse = await client.request(KnownOp.sessionAuth, {
-      'signature': base64Encode(signature),
-    }).catchError(_asAppError);
+    final authResponse = await client
+        .request(KnownOp.sessionAuth, {'signature': base64Encode(signature)})
+        .catchError(_asAppError);
 
     return Ready.fromJson(authResponse);
   }

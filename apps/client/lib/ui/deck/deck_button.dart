@@ -71,7 +71,9 @@ class _DeckButtonState extends State<DeckButton> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final action = widget.action;
-    final base = widget.enabled ? action.colour : theme.disabledColor.withValues(alpha: 0.25);
+    final base = widget.enabled
+        ? action.colour
+        : theme.disabledColor.withValues(alpha: 0.25);
 
     return Listener(
       onPointerDown: _handleDown,
@@ -98,14 +100,17 @@ class _DeckButtonState extends State<DeckButton> {
               builder: (context, constraints) {
                 // Scale with the cell so a 5x8 grid on a phone stays legible and a 3x5 on a
                 // tablet does not look sparse.
-                final iconSize = (constraints.biggest.shortestSide * 0.34).clamp(16.0, 44.0);
+                final iconSize = (constraints.biggest.shortestSide * 0.34)
+                    .clamp(16.0, 44.0);
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
                       action.icon,
                       size: iconSize,
-                      color: Colors.white.withValues(alpha: widget.enabled ? 0.95 : 0.5),
+                      color: Colors.white.withValues(
+                        alpha: widget.enabled ? 0.95 : 0.5,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Padding(

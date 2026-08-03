@@ -19,7 +19,8 @@ class HostStore {
 
   final SharedPreferences _prefs;
 
-  static Future<HostStore> open() async => HostStore(await SharedPreferences.getInstance());
+  static Future<HostStore> open() async =>
+      HostStore(await SharedPreferences.getInstance());
 
   List<HostRecord> all() => decodeHostRecords(_prefs.getString(_hostsKey));
 
@@ -51,5 +52,6 @@ class HostStore {
   /// The host to reconnect to on launch, so the deck comes back without a menu.
   String? get lastHostId => _prefs.getString(_lastHostKey);
 
-  Future<void> setLastHostId(String hostId) => _prefs.setString(_lastHostKey, hostId);
+  Future<void> setLastHostId(String hostId) =>
+      _prefs.setString(_lastHostKey, hostId);
 }

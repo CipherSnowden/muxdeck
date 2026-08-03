@@ -1010,9 +1010,15 @@ mod tests {
         assert!(is_transient_exe_path(Path::new(
             "/home/dev/muxdeck/engine/target/debug/muxdeckd"
         )));
+
+        // Windows-only: on Unix a backslash is an ordinary filename character, so the whole
+        // string is a single path component and there is no `target/release` pair to find.
+        // Asserting it everywhere fails on the Linux and macOS CI legs.
+        #[cfg(windows)]
         assert!(is_transient_exe_path(Path::new(
             r"F:\projects\muxdeck\engine\target\release\muxdeckd.exe"
         )));
+
         assert!(is_transient_exe_path(Path::new(
             "/home/dev/muxdeck/engine/target/debug/deps/muxdeck_engine-abc123"
         )));

@@ -42,8 +42,10 @@ typedef PairingTransportFactory =
 
 /// Runs the pairing exchange.
 class PairingController extends Notifier<PairingFlowState> {
-  PairingTransportFactory get _transportFactory => ref.read(pairingTransportFactoryProvider);
-  DeviceIdentityStore get _identityStore => ref.read(deviceIdentityStoreProvider);
+  PairingTransportFactory get _transportFactory =>
+      ref.read(pairingTransportFactoryProvider);
+  DeviceIdentityStore get _identityStore =>
+      ref.read(deviceIdentityStoreProvider);
   HostStore get _hostStore => ref.read(hostStoreProvider);
 
   @override
@@ -90,7 +92,10 @@ class PairingController extends Notifier<PairingFlowState> {
     try {
       final identity = await _identityStore.load();
 
-      transport = _transportFactory(address: address, fingerprint: fingerprint ?? '');
+      transport = _transportFactory(
+        address: address,
+        fingerprint: fingerprint ?? '',
+      );
       await transport.connect();
       client = ProtocolClient(transport);
 

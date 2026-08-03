@@ -11,7 +11,6 @@ import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-
 /// Where the 32-byte Ed25519 seed lives in secure storage.
 const _seedKey = 'muxdeck.device.seed';
 
@@ -114,7 +113,9 @@ class DeviceIdentityStore {
 
   Future<DeviceIdentity> _fromSeed(Uint8List seed) async {
     final keyPair = await Ed25519().newKeyPairFromSeed(seed);
-    final publicKey = Uint8List.fromList((await keyPair.extractPublicKey()).bytes);
+    final publicKey = Uint8List.fromList(
+      (await keyPair.extractPublicKey()).bytes,
+    );
 
     return DeviceIdentity(
       keyPair: keyPair,

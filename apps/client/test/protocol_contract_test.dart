@@ -52,7 +52,9 @@ void main() {
       // The scanner sees every code in front of the camera, so anything unrecognised has to be
       // ignorable rather than fatal.
       expect(
-        PairingPayload.tryParse(_validPayload.replaceFirst('muxdeck://', 'https://')),
+        PairingPayload.tryParse(
+          _validPayload.replaceFirst('muxdeck://', 'https://'),
+        ),
         isNull,
       );
     });
@@ -61,7 +63,8 @@ void main() {
       const parameters = {
         'addr': '&addr=192.168.1.42:47654',
         'host': '&host=h_a91c4d2e8f019b37',
-        'fp': '&fp=3b1f8c07d2a94e65b0c3f7128d4a6e590fb27c8d41e93a05672bd8f4c1e0a937',
+        'fp':
+            '&fp=3b1f8c07d2a94e65b0c3f7128d4a6e590fb27c8d41e93a05672bd8f4c1e0a937',
         'code': '&code=402913',
       };
 
@@ -119,7 +122,10 @@ void main() {
     test('rejects a host ID of the wrong length', () {
       expect(
         PairingPayload.tryParse(
-          _validPayload.replaceFirst('host=h_a91c4d2e8f019b37', 'host=h_a91c4d2e'),
+          _validPayload.replaceFirst(
+            'host=h_a91c4d2e8f019b37',
+            'host=h_a91c4d2e',
+          ),
         ),
         isNull,
       );
@@ -128,7 +134,10 @@ void main() {
     test('rejects an address with no port', () {
       expect(
         PairingPayload.tryParse(
-          _validPayload.replaceFirst('addr=192.168.1.42:47654', 'addr=192.168.1.42'),
+          _validPayload.replaceFirst(
+            'addr=192.168.1.42:47654',
+            'addr=192.168.1.42',
+          ),
         ),
         isNull,
       );
@@ -137,7 +146,10 @@ void main() {
     test('rejects arbitrary text', () {
       // A URL parser accepts a bare word as a relative reference, so this reaches the scheme
       // check rather than throwing — which is exactly the path a random QR code takes.
-      expect(PairingPayload.tryParse('WIFI:S=CoffeeShop;T=WPA;P=hunter2;;'), isNull);
+      expect(
+        PairingPayload.tryParse('WIFI:S=CoffeeShop;T=WPA;P=hunter2;;'),
+        isNull,
+      );
       expect(PairingPayload.tryParse('not a uri at all'), isNull);
       expect(PairingPayload.tryParse(''), isNull);
     });
@@ -167,7 +179,9 @@ void main() {
     test('differs for a different key', () {
       expect(
         deviceIdFromPublicKey(publicKey),
-        isNot(deviceIdFromPublicKey(List<int>.generate(32, (index) => index + 1))),
+        isNot(
+          deviceIdFromPublicKey(List<int>.generate(32, (index) => index + 1)),
+        ),
       );
     });
   });
@@ -177,7 +191,8 @@ void main() {
       hostId: 'h_a91c4d2e8f019b37',
       hostName: 'ENIGMA-ENTROPY',
       address: '192.168.1.42:47654',
-      fingerprint: '3b1f8c07d2a94e65b0c3f7128d4a6e590fb27c8d41e93a05672bd8f4c1e0a937',
+      fingerprint:
+          '3b1f8c07d2a94e65b0c3f7128d4a6e590fb27c8d41e93a05672bd8f4c1e0a937',
       deviceId: 'd_7f3a91c2b4e05d18',
     );
 
@@ -220,14 +235,16 @@ void main() {
           hostId: 'h_a91c4d2e8f019b37',
           hostName: 'ENIGMA-ENTROPY',
           address: '192.168.1.42:47654',
-          fingerprint: '3b1f8c07d2a94e65b0c3f7128d4a6e590fb27c8d41e93a05672bd8f4c1e0a937',
+          fingerprint:
+              '3b1f8c07d2a94e65b0c3f7128d4a6e590fb27c8d41e93a05672bd8f4c1e0a937',
           deviceId: 'd_7f3a91c2b4e05d18',
         ),
         HostRecord(
           hostId: 'h_0123456789abcdef',
           hostName: 'WORKSTATION',
           address: '192.168.1.43:47654',
-          fingerprint: 'ac2f9b1d80e347c5a6b1029e4f7d3c58091b6a2e7d4f8c130b5e9a627c4d8f01',
+          fingerprint:
+              'ac2f9b1d80e347c5a6b1029e4f7d3c58091b6a2e7d4f8c130b5e9a627c4d8f01',
           deviceId: 'd_7f3a91c2b4e05d18',
         ),
       ]);

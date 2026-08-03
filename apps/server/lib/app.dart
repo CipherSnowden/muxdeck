@@ -45,7 +45,8 @@ class PanelHome extends ConsumerStatefulWidget {
   ConsumerState<PanelHome> createState() => _PanelHomeState();
 }
 
-class _PanelHomeState extends ConsumerState<PanelHome> with WindowListener, TrayListener {
+class _PanelHomeState extends ConsumerState<PanelHome>
+    with WindowListener, TrayListener {
   var _index = 0;
 
   /// Shown once, the first time the window hides rather than closes.
@@ -118,7 +119,8 @@ class _PanelHomeState extends ConsumerState<PanelHome> with WindowListener, Tray
   Future<void> _refreshTray() async {
     final state = ref.read(adminSessionProvider);
     final status = switch (state) {
-      AdminReady(:final devices) when devices.any((d) => d.connected) => 'a device is connected',
+      AdminReady(:final devices) when devices.any((d) => d.connected) =>
+        'a device is connected',
       AdminReady() => 'running, no devices connected',
       AdminConnecting() => 'starting…',
       _ => 'not running',

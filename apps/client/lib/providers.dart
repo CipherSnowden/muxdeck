@@ -26,7 +26,9 @@ import 'domain/session/session_state.dart';
 /// Throwing by default is deliberate: a provider silently returning an empty store would make
 /// "my hosts disappeared" a plausible bug report instead of a startup crash in development.
 final hostStoreProvider = Provider<HostStore>(
-  (ref) => throw UnimplementedError('hostStoreProvider must be overridden in main()'),
+  (ref) => throw UnimplementedError(
+    'hostStoreProvider must be overridden in main()',
+  ),
 );
 
 final deviceIdentityStoreProvider = Provider<DeviceIdentityStore>(
@@ -35,19 +37,21 @@ final deviceIdentityStoreProvider = Provider<DeviceIdentityStore>(
 
 /// Builds the transport for a paired host. Overridden in tests with a fake.
 final transportFactoryProvider = Provider<TransportFactory>(
-  (ref) => (host) => LanTransport(
-    uri: host.websocketUri,
-    expectedFingerprint: host.fingerprint,
-    hostName: host.hostName,
-  ),
+  (ref) =>
+      (host) => LanTransport(
+        uri: host.websocketUri,
+        expectedFingerprint: host.fingerprint,
+        hostName: host.hostName,
+      ),
 );
 
 /// Builds the transport used during pairing, before a host record exists.
 final pairingTransportFactoryProvider = Provider<PairingTransportFactory>(
-  (ref) => ({required String address, required String fingerprint}) => LanTransport(
-    uri: Uri.parse('wss://$address/ws'),
-    expectedFingerprint: fingerprint,
-  ),
+  (ref) =>
+      ({required String address, required String fingerprint}) => LanTransport(
+        uri: Uri.parse('wss://$address/ws'),
+        expectedFingerprint: fingerprint,
+      ),
 );
 
 /// The paired hosts on disk.

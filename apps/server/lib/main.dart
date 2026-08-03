@@ -33,7 +33,9 @@ Future<void> main() async {
   await windowManager.setPreventClose(true);
 
   await trayManager.setIcon(
-    Platform.isWindows ? 'windows/runner/resources/app_icon.ico' : 'assets/tray_icon.png',
+    Platform.isWindows
+        ? 'windows/runner/resources/app_icon.ico'
+        : 'assets/tray_icon.png',
   );
 
   runApp(const ProviderScope(child: MuxDeckPanel()));

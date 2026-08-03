@@ -157,19 +157,20 @@ class _PairingPageState extends ConsumerState<PairingPage> {
     );
   }
 
-  InputDecoration _fieldDecoration(String label, String hint) => InputDecoration(
-    labelText: label,
-    hintText: hint,
-    labelStyle: const TextStyle(color: Colors.white54),
-    hintStyle: const TextStyle(color: Colors.white24),
-    counterStyle: const TextStyle(color: Colors.white38),
-    enabledBorder: const OutlineInputBorder(
-      borderSide: BorderSide(color: Colors.white24),
-    ),
-    focusedBorder: const OutlineInputBorder(
-      borderSide: BorderSide(color: Color(0xFF2D6CDF)),
-    ),
-  );
+  InputDecoration _fieldDecoration(String label, String hint) =>
+      InputDecoration(
+        labelText: label,
+        hintText: hint,
+        labelStyle: const TextStyle(color: Colors.white54),
+        hintStyle: const TextStyle(color: Colors.white24),
+        counterStyle: const TextStyle(color: Colors.white38),
+        enabledBorder: const OutlineInputBorder(
+          borderSide: BorderSide(color: Colors.white24),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderSide: BorderSide(color: Color(0xFF2D6CDF)),
+        ),
+      );
 
   void _submitManual() {
     final address = _addressController.text.trim();
@@ -178,13 +179,17 @@ class _PairingPageState extends ConsumerState<PairingPage> {
     if (!address.contains(':') || code.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Enter an address as host:port, and the full 6-digit code.'),
+          content: Text(
+            'Enter an address as host:port, and the full 6-digit code.',
+          ),
         ),
       );
       return;
     }
 
-    ref.read(pairingProvider.notifier).pairManually(address: address, code: code);
+    ref
+        .read(pairingProvider.notifier)
+        .pairManually(address: address, code: code);
   }
 }
 
@@ -214,7 +219,10 @@ class _ScannerUnavailable extends StatelessWidget {
               style: TextStyle(color: Colors.white54),
             ),
             const SizedBox(height: 20),
-            FilledButton(onPressed: onManual, child: const Text('Enter manually')),
+            FilledButton(
+              onPressed: onManual,
+              child: const Text('Enter manually'),
+            ),
           ],
         ),
       ),

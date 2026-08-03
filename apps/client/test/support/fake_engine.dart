@@ -188,7 +188,8 @@ class FakeEngine implements Transport, FingerprintReporting {
     final op = envelope['op'] as String?;
     if (id == null || op == null) return;
 
-    final payload = envelope['d'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+    final payload =
+        envelope['d'] as Map<String, dynamic>? ?? const <String, dynamic>{};
 
     switch (KnownOp.tryFromWire(op)) {
       case KnownOp.sessionHello:
@@ -237,7 +238,8 @@ class FakeEngine implements Transport, FingerprintReporting {
         id: id,
         op: op,
         code: ErrorCode.badRequest,
-        message: 'session.hello without device_id; this fake speaks only the deck form',
+        message:
+            'session.hello without device_id; this fake speaks only the deck form',
       );
       return;
     }
@@ -361,7 +363,8 @@ class FakeEngine implements Transport, FingerprintReporting {
         id: id,
         op: op,
         code: ErrorCode.badRequest,
-        message: 'device_pubkey must be $pubkeyLength bytes and proof $signatureLength, base64',
+        message:
+            'device_pubkey must be $pubkeyLength bytes and proof $signatureLength, base64',
       );
       return;
     }

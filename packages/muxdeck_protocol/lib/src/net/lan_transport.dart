@@ -114,7 +114,9 @@ class LanTransport implements Transport, FingerprintReporting {
     if (_fingerprintRejected) return const FingerprintMismatch();
 
     // web_socket_channel 3.x wraps the real cause; unwrap before matching on it.
-    final cause = error is WebSocketChannelException ? (error.inner ?? error) : error;
+    final cause = error is WebSocketChannelException
+        ? (error.inner ?? error)
+        : error;
 
     if (cause is HandshakeException) {
       // A TLS failure that was not our rejection is still an identity problem: the host is

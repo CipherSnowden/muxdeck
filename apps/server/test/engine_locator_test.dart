@@ -47,7 +47,12 @@ void main() {
 
     test('rejects anything that is not a certificate', () {
       expect(fingerprintFromPem(''), isNull);
-      expect(fingerprintFromPem('-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----'), isNull);
+      expect(
+        fingerprintFromPem(
+          '-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----',
+        ),
+        isNull,
+      );
       expect(fingerprintFromPem('not base64 at all !!!'), isNull);
     });
   });

@@ -63,7 +63,8 @@ class HostRecord {
   Uri get websocketUri => Uri.parse('wss://$address/ws');
 
   @override
-  bool operator ==(Object other) => other is HostRecord && other.hostId == hostId;
+  bool operator ==(Object other) =>
+      other is HostRecord && other.hostId == hostId;
 
   @override
   int get hashCode => hostId.hashCode;
@@ -90,14 +91,18 @@ class PairingPayload {
 
   static PairingPayload? tryParse(String raw) {
     final uri = Uri.tryParse(raw.trim());
-    if (uri == null || uri.scheme != 'muxdeck' || uri.host != 'pair') return null;
+    if (uri == null || uri.scheme != 'muxdeck' || uri.host != 'pair')
+      return null;
 
     final address = uri.queryParameters['addr'];
     final hostId = uri.queryParameters['host'];
     final fingerprint = uri.queryParameters['fp'];
     final code = uri.queryParameters['code'];
 
-    if (address == null || hostId == null || fingerprint == null || code == null) {
+    if (address == null ||
+        hostId == null ||
+        fingerprint == null ||
+        code == null) {
       return null;
     }
 
@@ -122,9 +127,12 @@ class PairingPayload {
   final String code;
 
   static bool _isHostId(String value) =>
-      value.length == 18 && value.startsWith('h_') && _isHex(value.substring(2));
+      value.length == 18 &&
+      value.startsWith('h_') &&
+      _isHex(value.substring(2));
 
-  static bool _isFingerprint(String value) => value.length == 64 && _isHex(value);
+  static bool _isFingerprint(String value) =>
+      value.length == 64 && _isHex(value);
 
   static bool _isPairingCode(String value) =>
       value.length == 6 && value.codeUnits.every((c) => c >= 0x30 && c <= 0x39);

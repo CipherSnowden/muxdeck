@@ -19,7 +19,10 @@ class StatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final (colour, label) = switch (state) {
       SessionDisconnected() => (const Color(0xFF4A5568), 'Disconnected'),
-      SessionConnecting(:final hostName) => (const Color(0xFFB8860B), 'Connecting to $hostName…'),
+      SessionConnecting(:final hostName) => (
+        const Color(0xFFB8860B),
+        'Connecting to $hostName…',
+      ),
       SessionAuthenticating(:final hostName) => (
         const Color(0xFFB8860B),
         'Authenticating with $hostName…',
@@ -52,7 +55,9 @@ class StatusChip extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Colors.white70),
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: Colors.white70),
             ),
           ),
         ],
