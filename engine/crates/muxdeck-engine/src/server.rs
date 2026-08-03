@@ -13,10 +13,12 @@ use axum::routing::get;
 use axum::Router;
 use axum_server::tls_rustls::RustlsConfig;
 use muxdeck_core::{
-    AuthRequest, Empty, Envelope, ErrorCode, HelloRequest, KnownOp, MessageType, Op,
-    PairBeginRequest, PairBeginResponse, PairListDevicesResponse, PairRequest, PairResponse,
-    PairRevokeRequest, PairingState, PingRequest, PingResponse, ProfileActivateRequest,
-    ProfileDeleteRequest, ProfileGetRequest, ProfileListResponse, ProfileWrapper, Role,
+    ActionDeleteRequest, ActionListResponse, ActionRunRequest, ActionSetRequest, AuthRequest,
+    Empty, Envelope, ErrorCode, HelloRequest, KnownOp, MessageType, Op, PairBeginRequest,
+    PairBeginResponse, PairListDevicesResponse, PairRequest, PairResponse, PairRevokeRequest,
+    PairingState, PingRequest, PingResponse, ProfileActivateRequest, ProfileDeleteRequest,
+    ProfileGetRequest, ProfileListResponse, ProfileWrapper, Role, SettingsPatch,
+    SettingsSetResponse,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -99,6 +101,15 @@ impl EventBus {
     fn subscribe(&self) -> broadcast::Receiver<Event> {
         self.0.subscribe()
     }
+
+    /// Whether any socket is connected to receive events.
+    ///
+    /// Used by the telemetry sampler to avoid waking for an empty room. It cannot distinguish a
+    /// telemetry subscriber from any other socket — every connection holds a receiver and
+    /// filters on arrival — so this is a floor, not an exact audience.
+    pub fn has_listeners(&self) -> bool {
+        self.0.receiver_count() > 0
+    }
 }
 
 impl Default for EventBus {
@@ -153,6 +164,11 @@ pub async fn serve(engine: Arc<Engine>, addr: SocketAddr) -> Result<Running> {
     .map_err(|e| EngineError::Certificate(format!("rustls rejected the certificate: {e}")))?;
 
     let events = EventBus::new();
+
+    // One sampler for the whole process, started here rather than by the binary so every test
+    // that calls `serve` exercises the same wiring the daemon does.
+    tokio::spawn(crate::telemetry::run(engine.clone(), events.clone()));
+
     let state = AppState {
         engine,
         events: events.clone(),
@@ -574,6 +590,50 @@ fn handle_envelope(
             value(&Empty {})
         }
 
+        KnownOp::ActionRun => {
+            let request: ActionRunRequest = payload(envelope.d)?;
+            engine.run_action(&request.action_id)?;
+            value(&Empty {})
+        }
+
+        KnownOp::ActionList => {
+            // Empty rather than an error when the feature is off, so a client can call this
+            // unconditionally at startup (`docs/PROTOCOL.md` §4.4). A deck that asked and got
+            // `DISABLED` would have to special-case it on every connect.
+            let actions = if engine.settings().shell_actions_enabled {
+                engine.with_actions(|store| store.list())
+            } else {
+                Vec::new()
+            };
+            value(&ActionListResponse { actions })
+        }
+
+        KnownOp::ActionSet => {
+            // Defining an action requires the feature on, not merely running one: writing a
+            // command to disk while the switch is off would let a panel stage something that
+            // becomes runnable the instant anybody flips it.
+            require_shell_actions(engine)?;
+            let request: ActionSetRequest = payload(envelope.d)?;
+            engine.with_actions(|store| store.set(request.action))?;
+            value(&Empty {})
+        }
+
+        KnownOp::ActionDelete => {
+            require_shell_actions(engine)?;
+            let request: ActionDeleteRequest = payload(envelope.d)?;
+            engine.with_actions(|store| store.delete(&request.action_id))?;
+            value(&Empty {})
+        }
+
+        KnownOp::SettingsGet => value(&engine.settings()),
+
+        KnownOp::SettingsSet => {
+            let patch: SettingsPatch = payload(envelope.d)?;
+            let restart_required = patch.requires_restart();
+            engine.apply_settings(patch)?;
+            value(&SettingsSetResponse { restart_required })
+        }
+
         // Input is the one group that is deliberately not handled here: every arm awaits, and
         // this function is synchronous so the session borrow does not cross an await point.
         KnownOp::InputKeyCombo
@@ -582,12 +642,24 @@ fn handle_envelope(
         | KnownOp::InputMedia
         | KnownOp::InputMouse => unreachable!("input ops are routed before this point"),
 
-        // Known to the protocol, not served by this build. Profiles arrive in M6, actions,
-        // telemetry and settings in M8.
+        // Events, which a client never sends as a request.
         _ => Err(EngineError::wire(
             ErrorCode::UnknownOp,
-            format!("{} is not implemented in this build yet", op.as_str()),
+            format!("{} is an event, not a request", op.as_str()),
         )),
+    }
+}
+
+/// Refuses the op unless shell actions are switched on.
+fn require_shell_actions(engine: &Arc<Engine>) -> Result<()> {
+    if engine.settings().shell_actions_enabled {
+        Ok(())
+    } else {
+        Err(EngineError::wire(
+            ErrorCode::Disabled,
+            "shell actions are switched off. Enable them in the MuxDeck control panel; \
+             any paired device will then be able to run every defined action.",
+        ))
     }
 }
 

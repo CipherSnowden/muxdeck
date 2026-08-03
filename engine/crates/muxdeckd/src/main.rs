@@ -11,7 +11,6 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use muxdeck_engine::admin_client::AdminClient;
 use muxdeck_engine::config::Paths;
-use muxdeck_engine::discovery::Advertisement;
 use muxdeck_engine::muxdeck_core::KnownOp;
 use muxdeck_engine::{server, service, Engine};
 use tracing::info;
@@ -157,20 +156,16 @@ async fn run_daemon(engine: std::sync::Arc<Engine>, port_override: Option<u16>) 
         "muxdeckd is listening"
     );
 
-    let advertisement = Advertisement::start(
-        &engine.host_name(),
-        engine.identity.host_id(),
-        engine.identity.fingerprint(),
-        running.addr.port(),
-    )
-    .context("advertising over mDNS")?;
+    // Owned by the engine rather than by this function, so `settings.set` can re-advertise
+    // under a new host name without a restart (`docs/PROTOCOL.md` §4.6).
+    engine.advertise().context("advertising over mDNS")?;
 
     tokio::signal::ctrl_c()
         .await
         .context("waiting for Ctrl-C")?;
     info!("shutting down");
 
-    advertisement.stop();
+    engine.stop_advertising();
     running.shutdown();
     Ok(())
 }

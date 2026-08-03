@@ -628,3 +628,267 @@ async fn an_unauthenticated_socket_is_closed_after_the_timeout() {
     assert_eq!(err.code, ErrorCode::NotAuthenticated);
     assert_eq!(muxdeck_engine::session::AUTH_TIMEOUT.as_secs(), 10);
 }
+
+// --- M8: settings, actions and telemetry ---------------------------------------------
+
+#[tokio::test]
+async fn settings_set_changes_only_the_keys_it_names() {
+    // The whole point of a partial patch: an absent key is left alone rather than reset to its
+    // default. A panel saving one toggle must not silently revert every other setting.
+    let harness = Harness::start("settings_partial").await;
+    let mut admin = harness.admin().await;
+
+    let before = admin
+        .request(KnownOp::SettingsGet, &json!({}))
+        .await
+        .expect("settings.get");
+    assert_eq!(
+        before["shell_actions_enabled"],
+        json!(false),
+        "off by default"
+    );
+
+    admin
+        .request(
+            KnownOp::SettingsSet,
+            &json!({ "telemetry_interval_ms": 250 }),
+        )
+        .await
+        .expect("settings.set");
+
+    let after = admin
+        .request(KnownOp::SettingsGet, &json!({}))
+        .await
+        .expect("settings.get");
+    assert_eq!(after["telemetry_interval_ms"], json!(250));
+    assert_eq!(
+        after["host_name"], before["host_name"],
+        "a key absent from the patch must survive it"
+    );
+    assert_eq!(after["port"], before["port"]);
+}
+
+#[tokio::test]
+async fn only_a_port_change_asks_for_a_restart() {
+    let harness = Harness::start("settings_restart").await;
+    let mut admin = harness.admin().await;
+
+    let live = admin
+        .request(KnownOp::SettingsSet, &json!({ "telemetry_enabled": false }))
+        .await
+        .expect("settings.set");
+    assert_eq!(live["restart_required"], json!(false));
+
+    let empty = admin
+        .request(KnownOp::SettingsSet, &json!({}))
+        .await
+        .expect("an empty patch is valid");
+    assert_eq!(empty["restart_required"], json!(false));
+
+    let port = admin
+        .request(KnownOp::SettingsSet, &json!({ "port": 47700 }))
+        .await
+        .expect("settings.set");
+    assert_eq!(port["restart_required"], json!(true));
+}
+
+#[tokio::test]
+async fn a_deck_cannot_read_or_write_settings() {
+    let harness = Harness::start("settings_role").await;
+    let (key, device_id) = pair_device(&harness, 60).await;
+    let mut deck = authenticate(&harness, &key, &device_id).await;
+
+    for op in [KnownOp::SettingsGet, KnownOp::SettingsSet] {
+        let err = deck
+            .call(op, json!({}))
+            .await
+            .expect_err("settings are admin only");
+        assert_eq!(err.code, ErrorCode::NotAuthorized, "{}", op.as_str());
+    }
+}
+
+#[tokio::test]
+async fn actions_are_refused_until_the_feature_is_switched_on() {
+    let harness = Harness::start("actions_disabled").await;
+    let mut admin = harness.admin().await;
+
+    // Defining requires the feature on, not merely running: staging a command while the switch
+    // is off would make it runnable the instant anybody flips it.
+    let err = admin
+        .request(
+            KnownOp::ActionSet,
+            &json!({ "action": {
+                "id": "a_one", "name": "Echo", "command": "echo",
+                "args": ["hello"], "cwd": null
+            }}),
+        )
+        .await
+        .expect_err("action.set must be refused while shell actions are off");
+    assert_eq!(err.to_payload().code, ErrorCode::Disabled);
+
+    let err = admin
+        .request(KnownOp::ActionRun, &json!({ "action_id": "a_one" }))
+        .await
+        .expect_err("action.run must be refused too");
+    assert_eq!(err.to_payload().code, ErrorCode::Disabled);
+
+    // Listing still succeeds and comes back empty, so a client can call it unconditionally at
+    // startup rather than special-casing the disabled state on every connect.
+    let list = admin
+        .request(KnownOp::ActionList, &json!({}))
+        .await
+        .expect("action.list must never be an error");
+    assert_eq!(list["actions"], json!([]));
+}
+
+#[tokio::test]
+async fn an_action_can_be_defined_run_and_deleted_once_enabled() {
+    let harness = Harness::start("actions_enabled").await;
+    let mut admin = harness.admin().await;
+
+    admin
+        .request(
+            KnownOp::SettingsSet,
+            &json!({ "shell_actions_enabled": true }),
+        )
+        .await
+        .expect("enable shell actions");
+
+    // Something that exists on every platform in the CI matrix and exits immediately.
+    let command = if cfg!(windows) { "cmd" } else { "true" };
+    let args = if cfg!(windows) {
+        json!(["/c", "exit"])
+    } else {
+        json!([])
+    };
+
+    admin
+        .request(
+            KnownOp::ActionSet,
+            &json!({ "action": {
+                "id": "a_one", "name": "No-op", "command": command,
+                "args": args, "cwd": null
+            }}),
+        )
+        .await
+        .expect("action.set");
+
+    let list = admin
+        .request(KnownOp::ActionList, &json!({}))
+        .await
+        .expect("action.list");
+    assert_eq!(list["actions"].as_array().map(Vec::len), Some(1));
+
+    admin
+        .request(KnownOp::ActionRun, &json!({ "action_id": "a_one" }))
+        .await
+        .expect("action.run");
+
+    admin
+        .request(KnownOp::ActionDelete, &json!({ "action_id": "a_one" }))
+        .await
+        .expect("action.delete");
+
+    let err = admin
+        .request(KnownOp::ActionRun, &json!({ "action_id": "a_one" }))
+        .await
+        .expect_err("a deleted action must not still run");
+    assert_eq!(err.to_payload().code, ErrorCode::NotFound);
+}
+
+#[tokio::test]
+async fn a_deck_may_run_actions_but_not_define_them() {
+    let harness = Harness::start("actions_role").await;
+    harness
+        .admin()
+        .await
+        .request(
+            KnownOp::SettingsSet,
+            &json!({ "shell_actions_enabled": true }),
+        )
+        .await
+        .expect("enable shell actions");
+
+    let (key, device_id) = pair_device(&harness, 61).await;
+    let mut deck = authenticate(&harness, &key, &device_id).await;
+
+    // Running is allowed — this call fails with NOT_FOUND, which is the point: the role check
+    // passed and the lookup is what refused.
+    let err = deck
+        .call(KnownOp::ActionRun, json!({ "action_id": "a_missing" }))
+        .await
+        .expect_err("no such action");
+    assert_eq!(err.code, ErrorCode::NotFound);
+
+    for op in [KnownOp::ActionSet, KnownOp::ActionDelete] {
+        let err = deck
+            .call(op, json!({}))
+            .await
+            .expect_err("defining actions is admin only");
+        assert_eq!(err.code, ErrorCode::NotAuthorized, "{}", op.as_str());
+    }
+}
+
+#[tokio::test]
+async fn a_subscribed_socket_receives_telemetry() {
+    let harness = Harness::start("telemetry").await;
+    let (key, device_id) = pair_device(&harness, 62).await;
+    let mut deck = authenticate(&harness, &key, &device_id).await;
+
+    // Faster than the default second so the test does not idle; the sampler clamps to its own
+    // 200 ms floor regardless.
+    harness
+        .admin()
+        .await
+        .request(
+            KnownOp::SettingsSet,
+            &json!({ "telemetry_interval_ms": 200 }),
+        )
+        .await
+        .expect("settings.set");
+
+    deck.call(KnownOp::TelemetrySubscribe, json!({}))
+        .await
+        .expect("telemetry.subscribe");
+
+    let event = await_event(
+        &mut deck,
+        KnownOp::TelemetryUpdate,
+        std::time::Duration::from_secs(10),
+    )
+    .await
+    .expect("a subscribed socket must receive telemetry.update");
+
+    let cpu = event["cpu_pct"].as_f64().expect("cpu_pct is a number");
+    let ram = event["ram_pct"].as_f64().expect("ram_pct is a number");
+    assert!((0.0..=100.0).contains(&cpu), "cpu_pct out of range: {cpu}");
+    assert!((0.0..=100.0).contains(&ram), "ram_pct out of range: {ram}");
+    assert!(
+        event["ts"].as_i64().unwrap_or(0) > 1_700_000_000,
+        "the timestamp must be real"
+    );
+}
+
+#[tokio::test]
+async fn an_unsubscribed_socket_receives_no_telemetry() {
+    // Telemetry has its own subscription and is not implied by profile.subscribe
+    // (`docs/PROTOCOL.md` §4.7). A deck rendering buttons should not be woken every second.
+    let harness = Harness::start("telemetry_unsubscribed").await;
+    let (key, device_id) = pair_device(&harness, 63).await;
+    let mut deck = authenticate(&harness, &key, &device_id).await;
+
+    deck.call(KnownOp::ProfileSubscribe, json!({}))
+        .await
+        .expect("profile.subscribe");
+
+    let event = await_event(
+        &mut deck,
+        KnownOp::TelemetryUpdate,
+        std::time::Duration::from_millis(1500),
+    )
+    .await;
+    assert!(
+        event.is_none(),
+        "profile.subscribe must not imply telemetry.subscribe"
+    );
+}
