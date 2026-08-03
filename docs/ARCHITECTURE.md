@@ -143,16 +143,21 @@ No shared secret is ever transmitted after pairing.
 
 1. Client connects, verifies the pinned certificate fingerprint stored at pairing time.
 2. Client sends `session.hello` with its device ID.
-3. Engine responds with a `Challenge` payload carrying a 32-byte random nonce.
+3. Engine responds `mode: "challenge"`, carrying a 32-byte random nonce.
 4. Client signs `b"muxdeck-session-v1" || nonce || device_id || host_id` with its device private
    key and sends `session.auth`. The domain prefix and the `host_id` stop a signature captured
    against one host being replayed at another.
 5. Engine verifies the signature against the stored public key and responds with a `Ready`
    payload.
 
+The panel's loopback path (§5.4) sends the same `session.hello` op and gets `mode: "ready"` back
+immediately, skipping steps 3–5.
+
 There are only two session ops, `session.hello` and `session.auth`; `Challenge` and `Ready` are
 payload shapes on their responses, not ops of their own. Responses echo the op of the request
-they answer — see `docs/PROTOCOL.md` §2.
+they answer, and the `session.hello` response is an internally-tagged union on `mode` so the
+branch is read from the tag rather than inferred from which fields are present — see
+`docs/PROTOCOL.md` §2 and §4.1.
 
 This is the `deck` path. The local control panel authenticates differently — see §5.4.
 
@@ -170,9 +175,9 @@ Two roles: `deck` for paired devices, `admin` for the local control panel.
 
 On first run the engine writes `admin.token` into the config directory: 32 random bytes, base64,
 file mode `0600` on Unix and a current-user-only DACL on Windows. A loopback client sends it in
-`session.hello` instead of a `device_id`, and receives a `Ready` payload directly — there is no
-challenge round trip and no `session.auth`. The 10-second unauthenticated-socket timeout still
-applies.
+`session.hello` instead of a `device_id`, and receives a `mode: "ready"` response directly —
+there is no challenge round trip and no `session.auth`. The 10-second unauthenticated-socket
+timeout still applies.
 
 `session.hello` therefore carries either `device_id` (deck, leads to a challenge) or
 `admin_token` (panel, immediately ready). Exactly one; both or neither is `BAD_REQUEST`.

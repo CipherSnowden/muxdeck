@@ -226,7 +226,8 @@ panel. `--ttl` obeys the `30..=300` clamp from `docs/PROTOCOL.md` §4.2.
 - `session`: full handshake happy path; wrong signature; unknown device; timeout; op sent
   before auth; `session.hello` carrying both `device_id` and `admin_token`, and neither; a valid
   `admin_token` from a non-loopback address (must not grant `admin`); a loopback connection with
-  a wrong or absent token (must not grant `admin`).
+  a wrong or absent token (must not grant `admin`); the `session.hello` response carries the
+  correct `mode` tag on each path, and an unrecognised `mode` is rejected rather than skipped.
 - `pairing`: correct OTP; wrong OTP; invalid proof-of-possession; expired window; `ttl_seconds`
   out of the `30..=300` range; pairing op outside the window.
 - `dispatch`: every op × every role, asserting the capability matrix in

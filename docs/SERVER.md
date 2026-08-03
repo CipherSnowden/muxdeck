@@ -49,8 +49,8 @@ config directory — it does not need a QR code, because it is already on the ma
 
 `admin` is granted by the engine only when the connection is **both** from loopback **and**
 presenting the local admin token. The panel reads `admin.token` from the same config directory
-and sends it in `session.hello` in place of a `device_id`; the response is a `Ready` payload
-directly, with no challenge round trip and no `session.auth`. See `docs/ARCHITECTURE.md` §5.4 —
+and sends it in `session.hello` in place of a `device_id`; the response comes back tagged
+`mode: "ready"`, with no challenge round trip and no `session.auth`. See `docs/ARCHITECTURE.md` §5.4 —
 the token exists because loopback alone would also admit a second logged-in user on a
 multi-user desktop.
 

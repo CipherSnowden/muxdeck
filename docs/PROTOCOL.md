@@ -98,24 +98,27 @@ discovery result by string equality.
 A remote deck authenticates by signing a challenge with its device key:
 
 ```
-client                                   engine
-  │  ── TLS connect, verify fingerprint ──▶
-  │  ── req session.hello (device_id) ───▶
-  │  ◀── res session.hello (Challenge) ───
-  │  ── req session.auth (signature) ────▶
-  │  ◀── res session.auth (Ready) ────────
+client                                        engine
+  │  ── TLS connect, verify fingerprint ───────▶
+  │  ── req session.hello (device_id) ────────▶
+  │  ◀── res session.hello (mode: "challenge") ─
+  │  ── req session.auth (signature) ─────────▶
+  │  ◀── res session.auth (Ready) ──────────────
   │        ... normal operation ...
 ```
 
 A loopback admin client authenticates with the local admin token, in one round trip:
 
 ```
-panel                                    engine
-  │  ── TLS connect, verify fingerprint ──▶
-  │  ── req session.hello (admin_token) ─▶
-  │  ◀── res session.hello (Ready) ───────
+panel                                         engine
+  │  ── TLS connect, verify fingerprint ───────▶
+  │  ── req session.hello (admin_token) ──────▶
+  │  ◀── res session.hello (mode: "ready") ─────
   │        ... normal operation ...
 ```
+
+The response to `session.hello` carries a required `mode` field saying which of the two shapes it
+is, so a client never has to infer the branch from which fields happen to be present (§4.1).
 
 The engine pushes nothing on its own after the handshake. A client that wants a layout calls
 `profile.get`, and `profile.subscribe` if it wants live updates; a client that wants telemetry
@@ -148,14 +151,34 @@ Admin form — the local control panel, loopback only:
 `platform` ∈ `ios` | `android` | `windows` | `macos` | `linux`. Exactly one of `device_id` and
 `admin_token` must be present; both or neither is `BAD_REQUEST`.
 
-**`session.hello`** — res, `Challenge` payload (deck form only):
+**`session.hello`** — res. The two response shapes form an **internally-tagged union** on a
+required `mode` field, `"challenge"` | `"ready"`. The tag is always present and is the only thing
+a reader needs to pick a branch — never infer the shape from which optional fields happen to be
+set. In Rust this is `#[serde(tag = "mode")]` on the response enum, not `#[serde(untagged)]`;
+untagged would make an added or renamed field fail over to the wrong variant instead of erroring.
+
+`mode: "challenge"` — answer to the deck form:
 ```json
-{ "nonce": "9pQ0Vv3xR7tK2mN5bC8jH1sD4gF6wZ0aY3eU7iL5oP4=",
+{ "mode": "challenge",
+  "nonce": "9pQ0Vv3xR7tK2mN5bC8jH1sD4gF6wZ0aY3eU7iL5oP4=",
   "host_id": "h_a91c4d2e8f019b37", "host_name": "ENIGMA-ENTROPY" }
 ```
 
-**`session.hello`** — res, `Ready` payload (admin form only). Identical shape to the `Ready`
-below; `session.auth` is not sent on this path.
+`mode: "ready"` — answer to the admin form. The `Ready` payload documented below, with `mode`
+added; `session.auth` is not sent on this path:
+```json
+{ "mode": "ready",
+  "role": "admin", "protocol": 1, "engine_version": "0.1.0",
+  "host_platform": "windows", "active_profile_id": "p_default",
+  "capabilities": { "text_unicode": true, "media_keys": true,
+                    "mouse": true, "shell_actions": false } }
+```
+
+A `mode` the reader does not recognise is `BAD_REQUEST` on the engine side and a hard connection
+failure on the client side — not a field to skip past.
+
+**`mode` appears only on the `session.hello` response**, because that is the only place two
+shapes share one op. The `session.auth` response below is always `Ready` and carries no `mode`.
 
 **`session.auth`** — req. Valid only after a `Challenge`.
 ```json
@@ -177,7 +200,9 @@ signature captured against one host from being replayed against another. The Rus
 must build a byte-identical buffer; a mismatch authenticates nothing and is miserable to
 diagnose, so this layout is fixture-tested on both sides.
 
-**`session.auth`** — res, `Ready` payload:
+**`session.auth`** — res, `Ready` payload. No `mode` field: `session.auth` has exactly one
+response shape, so there is nothing to discriminate. The same `Ready` fields appear inside the
+`mode: "ready"` branch of the `session.hello` response above.
 ```json
 {
   "role": "deck",
@@ -482,10 +507,38 @@ Clients pick the highest major they also support.
 
 ## 8. Fixtures
 
-`protocol/fixtures/` holds one JSON file per message shape, named `<op>.<t>.json`, e.g.
-`input.key_combo.req.json`, `session.hello.req.json`, `session.hello.res.json`. Where a single
-op has more than one payload shape — `session.hello` has a deck form and an admin form — a
-variant suffix disambiguates: `session.hello.req.admin.json`, `session.hello.res.admin.json`.
+`protocol/fixtures/` holds one JSON file per message shape:
+
+```
+<op>.<t>[.<variant>].json
+```
+
+`<t>` is `req` | `res` | `err` | `evt`. `<variant>` is a short lowercase token, present only where
+one `(op, t)` pair has more than one payload shape.
+
+**Where a variant is needed, every file for that `(op, t)` carries one — none is left bare.**
+`session.hello` has two request shapes and two response shapes, so all four files are suffixed:
+
+```
+session.hello.req.deck.json         session.hello.res.challenge.json
+session.hello.req.admin.json        session.hello.res.ready.json
+session.auth.req.json               session.auth.res.json
+input.key_combo.req.json            profile.changed.evt.json
+```
+
+There is deliberately no `session.hello.req.json`. A bare file sitting next to a suffixed one
+reads as "the default shape", and the whole point is that neither shape is the default — the
+asymmetry invites an implementer to treat one as the fallback for anything unrecognised.
+
+Where the payload has a discriminant, the variant token **is** the discriminant's value
+(`challenge`, `ready`). Where it does not, the variant names the caller or context (`deck`,
+`admin`).
+
+**The variant plays no part in resolving which type to deserialise.** That is decided by `op` and
+`t` alone — plus, inside the payload, whatever tag the message itself carries, such as
+`session.hello`'s `mode` (§4.1). The suffix exists to keep filenames unique and to say what a
+fixture is an example *of*; a loader that switches behaviour on it has reimplemented the protocol
+in the test harness.
 
 Both the Rust and the Dart test suites must deserialise every fixture, re-serialise it, and
 assert semantic equality. A protocol change without a fixture change is incomplete.

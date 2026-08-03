@@ -146,12 +146,16 @@ The foundation everything else is checked against.
 > Implement milestone M1 from docs/BUILD-PLAN.md. docs/PROTOCOL.md is the source of truth —
 > follow it exactly and do not invent fields or ops.
 >
-> 1. Write protocol/fixtures/ with one JSON file per message shape named `<op>.<t>.json`,
->    covering every op and event in docs/PROTOCOL.md §4, plus the data objects in §6. Use
->    obviously fake values for anything key-shaped.
+> 1. Write protocol/fixtures/ with one JSON file per message shape, named per
+>    docs/PROTOCOL.md §8 (`<op>.<t>[.<variant>].json` — where an op has multiple shapes every
+>    file is suffixed, none left bare), covering every op and event in docs/PROTOCOL.md §4, plus
+>    the data objects in §6. Use obviously fake values for anything key-shaped.
 > 2. In engine/crates/muxdeck-core, define the full envelope and all payload types with serde.
 >    Use an enum over ops with `#[serde(rename_all = "snake_case")]` and explicit renames to
 >    match the dotted op names. Unknown ops must deserialise to a rejectable variant, not panic.
+>    The `session.hello` response is an internally-tagged union — `#[serde(tag = "mode")]`, never
+>    `untagged`. The fixture loader picks its type from `op` and `t` only; the filename variant
+>    is not an input to that decision.
 > 3. In packages/muxdeck_protocol, define the equivalent Dart types with hand-written
 >    fromJson/toJson (no build_runner — the protocol is small and codegen adds a build step for
 >    little gain here).
