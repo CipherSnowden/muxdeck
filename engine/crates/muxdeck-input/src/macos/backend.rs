@@ -351,7 +351,7 @@ fn chunk_by_utf16(text: &str, limit: usize) -> Vec<&str> {
 // `+[NSEvent otherEventWithType:...]` and then take its `CGEvent` — which is why this is the one
 // place in the workspace that speaks Objective-C.
 
-/// AppKit is linked for `NSEvent` alone; nothing else in the daemon touches it.
+// AppKit is linked for `NSEvent` alone; nothing else in the daemon touches it.
 #[link(name = "AppKit", kind = "framework")]
 extern "C" {}
 

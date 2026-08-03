@@ -619,9 +619,10 @@ Needs CI or real machines. Do the platform you have access to first.
   `/dev/uinput` handle that created it (reading that one blocks for ever waiting on
   force-feedback uploads), and the reader must be opened *before* anything is emitted, because
   the kernel buffers per open file description.
-- **CI now runs it every time.** `engine.yml` loads the `uinput` module, chmods the node and runs
-  the `#[ignore]`d tests on `ubuntu-latest`. Without that step the proof would have been a
-  one-off on this machine.
+- **CI now runs it every time.** `engine.yml` loads the `uinput` module and runs the `#[ignore]`d
+  tests as root on `ubuntu-latest`. Root rather than a chmod: the test also has to read the
+  `/dev/input/event*` node, which is `root:input 0640` and does not exist to be chmodded before
+  the device is created. Without that step the proof would have been a one-off on this machine.
 - **Both keymaps are plain tables that compile and test on Windows**, which is what made the
   milestone tractable at all: only the FFI layer is platform-gated, and for Linux even that was
   reachable through WSL. 27 of the 30 `muxdeck-input` tests run on every host.

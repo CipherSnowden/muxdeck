@@ -19,7 +19,9 @@ windows = { version = "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse", "
 evdev = "0.13.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-graphics = "0.25.0"
+# `highsierra` gates CGEventCreateScrollWheelEvent2, which is what `input.mouse` scrolls with.
+# The name is a floor, not a target: it means "10.13 or newer", which every supported macOS is.
+core-graphics = { version = "0.25.0", features = ["highsierra"] }
 # For NSEvent alone. Media keys are the one thing on macOS with no Core Graphics constructor,
 # so the backend has to build an NSSystemDefined event through the Objective-C runtime.
 objc2 = "0.6.4"

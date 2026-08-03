@@ -248,8 +248,12 @@ mod tests {
     /// not that the right codes went out, in the right order, with the right press and release
     /// values. Reading the stream back is the only way to check the bytes rather than the
     /// return value.
+    ///
+    /// Needs more than the other two: as well as writing to `/dev/uinput` it has to *read* the
+    /// `/dev/input/event*` node the kernel creates, which is `root:input 0640` and does not
+    /// exist to be chmodded in advance. In practice that means running as root.
     #[test]
-    #[ignore = "needs write access to /dev/uinput"]
+    #[ignore = "needs write access to /dev/uinput and read access to the node it creates"]
     fn a_combo_emits_the_right_codes_in_the_right_order() {
         use std::time::Instant;
 
