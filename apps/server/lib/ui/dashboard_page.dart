@@ -1,8 +1,11 @@
 /// Engine status, and anything wrong with it.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:muxdeck_protocol/muxdeck_protocol.dart';
 
 import '../domain/admin_session.dart';
 import '../providers.dart';
@@ -34,22 +37,48 @@ class DashboardPage extends ConsumerWidget {
   }
 }
 
-class _Running extends ConsumerWidget {
+class _Running extends ConsumerStatefulWidget {
   const _Running({required this.state});
 
   final AdminReady state;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Running> createState() => _RunningState();
+}
+
+class _RunningState extends ConsumerState<_Running> {
+  @override
+  void initState() {
+    super.initState();
+    // Deferred past the first frame: both touch providers, and Riverpod refuses a write while
+    // the widget tree is still building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(ref.read(telemetryProvider.notifier).subscribe());
+      ref.read(logProvider.notifier).start();
+    });
+  }
+
+  @override
+  void dispose() {
+    ref.read(logProvider.notifier).stop();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.state;
     final ready = state.ready;
     final connected = state.devices.where((d) => d.connected).length;
+    final telemetry = ref.watch(telemetryProvider).latest;
 
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
         // The preflight result is the loudest thing on the screen when it fails, because the
         // alternative is buttons that silently do nothing. `docs/SERVER.md` §6.
-        if (state.inputUnavailable) const _InputUnavailableBanner(),
+        if (state.inputUnavailable)
+          _InputUnavailableBanner(platform: ready.hostPlatform),
 
         _StatusCard(
           title: 'Engine running',
@@ -77,6 +106,28 @@ class _Running extends ConsumerWidget {
                 icon: Icons.wifi_tethering,
               ),
             ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _Metric(
+                label: 'CPU',
+                // Em dash rather than 0% until the first sample arrives: a dashboard that says
+                // the machine is idle before it has measured anything is lying.
+                value: telemetry == null
+                    ? '—'
+                    : '${telemetry.cpuPct.toStringAsFixed(1)}%',
+                icon: Icons.memory,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _Metric(
+                label: 'Memory',
+                value: telemetry == null
+                    ? '—'
+                    : '${telemetry.ramPct.toStringAsFixed(1)}%',
+                icon: Icons.storage,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 24),
@@ -100,18 +151,112 @@ class _Running extends ConsumerWidget {
           available: ready.capabilities.shellActions,
           offIsNormal: true,
         ),
+
+        const SizedBox(height: 24),
+        const _LogTail(),
       ],
     );
+  }
+}
+
+/// The engine's recent output, read from its log file.
+///
+/// Read from disk rather than fetched over the socket: the engine has no `log.tail` op, and
+/// adding one would put a file read on the protocol for something only a panel on the same
+/// machine could ever use.
+class _LogTail extends ConsumerWidget {
+  const _LogTail();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final log = ref.watch(logProvider);
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Recent log', style: theme.textTheme.titleMedium),
+            const Spacer(),
+            if (log.path != null)
+              Text(
+                log.path!,
+                style: theme.textTheme.bodySmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 220,
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0C0E13),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: log.error != null
+              ? Center(
+                  child: Text(log.error!, style: theme.textTheme.bodySmall),
+                )
+              // Reversed so the newest line is at the bottom **and** the view starts scrolled
+              // there. A log that opens at the top of a 200-line tail shows the oldest thing
+              // that happened, which is never what anybody came for.
+              : ListView(
+                  reverse: true,
+                  children: [
+                    for (final line in log.lines.reversed)
+                      SelectableText(
+                        line,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: _lineColour(line),
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// `tracing`'s level word is the only structure worth reading out of a log line here.
+  Color? _lineColour(String line) {
+    if (line.contains(' ERROR ')) return const Color(0xFFE06C5A);
+    if (line.contains(' WARN ')) return const Color(0xFFD8A657);
+    return Colors.white70;
   }
 }
 
 /// Shown when the engine reports it cannot inject anything.
 ///
 /// On Windows this should never appear — `SendInput` needs no permission. It exists for macOS
-/// (Accessibility not granted) and Linux (`/dev/uinput` not writable), whose backends arrive in
-/// M7 along with the specific remediation each one needs.
+/// (Accessibility not granted) and Linux (`/dev/uinput` not writable).
+///
+/// The remediation is chosen from the host platform rather than from the engine's own
+/// `preflight()` message, which is more specific but does not travel: `Ready` carries the
+/// capability flags and no error string (`docs/PROTOCOL.md` §4.1). Naming a wire field for it
+/// would be a protocol change, so the panel says the platform-typical fix instead.
 class _InputUnavailableBanner extends StatelessWidget {
-  const _InputUnavailableBanner();
+  const _InputUnavailableBanner({required this.platform});
+
+  final HostPlatform platform;
+
+  String get _remediation => switch (platform) {
+    HostPlatform.macos =>
+      'Open System Settings > Privacy & Security > Accessibility, add MuxDeck, and turn it '
+          'on. The permission is remembered per application binary, so moving or replacing '
+          'the app means granting it again.',
+    HostPlatform.linux =>
+      'MuxDeck cannot open /dev/uinput. Add your user to the input group and then log out '
+          'and back in — a new login is required, restarting the app is not enough:\n\n'
+          '    sudo usermod -aG input \$USER',
+    _ =>
+      'The engine could not reach this desktop session. If it was started by a scheduled '
+          'task, check that the task runs as you and not as SYSTEM.',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -141,6 +286,8 @@ class _InputUnavailableBanner extends StatelessWidget {
                   'The engine is running, but it cannot send keystrokes to this desktop. '
                   'Your deck will connect and its buttons will do nothing.',
                 ),
+                const SizedBox(height: 8),
+                SelectableText(_remediation),
               ],
             ),
           ),

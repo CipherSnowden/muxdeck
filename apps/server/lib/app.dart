@@ -8,10 +8,12 @@ import 'package:window_manager/window_manager.dart';
 
 import 'domain/admin_session.dart';
 import 'providers.dart';
+import 'ui/actions_page.dart';
 import 'ui/dashboard_page.dart';
 import 'ui/devices_page.dart';
 import 'ui/editor_page.dart';
 import 'ui/pair_page.dart';
+import 'ui/settings_page.dart';
 
 class MuxDeckPanel extends StatelessWidget {
   const MuxDeckPanel({super.key});
@@ -176,6 +178,16 @@ class _PanelHomeState extends ConsumerState<PanelHome>
                 selectedIcon: Icon(Icons.dashboard),
                 label: Text('Layout'),
               ),
+              NavigationRailDestination(
+                icon: Icon(Icons.terminal_outlined),
+                selectedIcon: Icon(Icons.terminal),
+                label: Text('Actions'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.settings_outlined),
+                selectedIcon: Icon(Icons.settings),
+                label: Text('Settings'),
+              ),
             ],
           ),
           const VerticalDivider(width: 1),
@@ -183,6 +195,8 @@ class _PanelHomeState extends ConsumerState<PanelHome>
             child: switch (_index) {
               1 => const DevicesPage(),
               2 => const EditorPage(),
+              3 => const ActionsPage(),
+              4 => const SettingsPage(),
               _ => const DashboardPage(),
             },
           ),
