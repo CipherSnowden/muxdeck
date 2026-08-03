@@ -296,8 +296,29 @@ range is `BAD_REQUEST`, not silently coerced.
 
 res:
 ```json
-{ "code": "402913", "expires_at": 1785312000, "qr_payload": "muxdeck://pair?addr=..." }
+{ "code": "402913",
+  "expires_at": 1785312000,
+  "qr_payload": "muxdeck://pair?addr=192.168.1.42:47654&host=h_a91c4d2e8f019b37&fp=3b1f8c07d2a94e65b0c3f7128d4a6e590fb27c8d41e93a05672bd8f4c1e0a937&code=402913" }
 ```
+
+`expires_at` is a Unix timestamp in **seconds**.
+
+`qr_payload` is constructed, not free-form. The client parses it, so its shape is part of the wire
+contract:
+
+- Scheme and path are exactly `muxdeck://pair`.
+- Parameters appear in exactly this order: `addr`, `host`, `fp`, `code`. Fixed order keeps the
+  string byte-stable, which is what lets a fixture assert it.
+- `addr` is `<ip>:<port>` — the host's primary non-loopback IPv4 address and the configured listen
+  port. Where several non-loopback addresses exist the engine picks the one on the interface
+  carrying the default route; the client can still reach the host by any of them afterwards,
+  because reconnection re-resolves by `host` through mDNS (`docs/ARCHITECTURE.md` §6).
+- `host` is the `h_…` host ID from §2.2 verbatim.
+- `fp` is the certificate fingerprint from §1 verbatim — lowercase hex, 64 characters.
+- `code` is the same six digits as the `code` field, duplicated so a scan needs no second step.
+
+No parameter is percent-encoded, because none of the four can contain a character that would need
+it — the address is numeric, and the IDs and fingerprint are hex with a fixed prefix.
 
 **`pair.cancel`** — req, admin only. `{}` → `{}`
 **`pair.list_devices`** — req, admin only. `{}` →
@@ -374,19 +395,45 @@ never sends a command string.
 ```json
 { "action_id": "a_obs_scene_gaming" }
 ```
-Returns `err` `DISABLED` if the shell feature is off, `NOT_FOUND` if the ID is unknown.
+res is `{}` on success. Returns `err` `DISABLED` if the shell feature is off, `NOT_FOUND` if the ID
+is unknown.
 
-**`action.list`** — role `deck` and `admin`. Returns defined actions, so a deck can label and
-gate its own buttons.
-**`action.set`** / **`action.delete`** — admin only. Defining an action requires the shell
-feature to be enabled.
+**`action.list`** — role `deck` and `admin`. req `{}` → res:
+```json
+{ "actions": [
+  { "id": "a_obs_scene_gaming", "name": "OBS: Gaming scene",
+    "command": "obs-cli", "args": ["scene","switch","--name","Gaming"], "cwd": null }
+] }
+```
+
+Full `Action` objects (§6), the same shape for both roles — `command` and `args` are not withheld
+from a `deck`. A deck can already *execute* every defined action, so hiding the string it will run
+buys nothing and would mean two response shapes for one op. When shell actions are disabled the
+list is empty rather than an error, so a client can call this unconditionally at startup.
+
+**`action.set`** — admin only. Creates or replaces by `id`.
+```json
+{ "action": { "id": "a_obs_scene_gaming", "name": "OBS: Gaming scene",
+              "command": "obs-cli", "args": ["scene","switch","--name","Gaming"], "cwd": null } }
+```
+→ `{}`. Returns `DISABLED` if the shell feature is off — defining an action requires it enabled,
+not merely running one.
+
+**`action.delete`** — admin only. `{ "action_id": "a_obs_scene_gaming" }` → `{}`, or `NOT_FOUND`.
+
+Deleting an action does **not** rewrite profiles that reference it. A button pointing at a deleted
+action fails with `NOT_FOUND` when pressed, consistent with the engine re-checking at execution
+time rather than trusting the stored profile (§6).
 
 ### 4.5 `profile.*`
 
 A **profile** is one deck layout: a grid of pages of buttons.
 
-**`profile.get`** — `{ "profile_id": "p_default" }` → a Profile object (§6).
-**`profile.list`** → `{ "profiles": [ { "id": "...", "name": "...", "active": true } ] }`
+**`profile.get`** — `{ "profile_id": "p_default" }` → `{ "profile": { ...Profile } }`, the object in
+§6. The Profile is **wrapped** under a `profile` key rather than being the payload itself, so that
+`profile.get`'s response, `profile.set`'s request and the `profile.changed` event all share one
+payload type on both sides instead of three near-identical ones.
+**`profile.list`** — req `{}` → `{ "profiles": [ { "id": "...", "name": "...", "active": true } ] }`
 **`profile.subscribe`** — `{}` → `{}`. Thereafter the engine pushes `evt profile.changed`.
 **`profile.activate`** — role `deck` and `admin`. `{ "profile_id": "p_stream" }` → `{}`
 **`profile.set`** — admin only. `{ "profile": { ...Profile } }` → `{}`
@@ -408,7 +455,7 @@ never last-write-wins, never silent coercion — on any of:
 
 ### 4.6 `settings.*` — admin only
 
-**`settings.get`** → 
+**`settings.get`** — req `{}` → res
 ```json
 {
   "port": 47654, "host_name": "ENIGMA-ENTROPY",
@@ -416,9 +463,20 @@ never last-write-wins, never silent coercion — on any of:
   "telemetry_interval_ms": 1000, "autostart": true
 }
 ```
-**`settings.set`** — partial object of the same shape → `{ "restart_required": bool }`.
-The response always carries `restart_required`; it is `true` when a changed field (such as
-`port`) needs a daemon restart to take effect.
+**`settings.set`** — req is a **partial** object of the same shape; only the keys present are
+changed, and an absent key is left alone rather than reset to its default.
+```json
+{ "port": 47700, "telemetry_interval_ms": 500 }
+```
+→
+```json
+{ "restart_required": true }
+```
+
+The response always carries `restart_required`. Of the settings above only `port` needs a restart;
+`host_name` triggers an mDNS re-advertise, and `shell_actions_enabled`, `telemetry_enabled`,
+`telemetry_interval_ms` and `autostart` all take effect immediately. An empty request object is
+valid and returns `{ "restart_required": false }`.
 
 ### 4.7 `telemetry.*` — role `deck` and `admin`
 
@@ -429,6 +487,11 @@ true. Telemetry has its own subscription; it is not implied by `profile.subscrib
 ### 4.8 `system.ping`
 
 **`system.ping`** — req `{ "t_client": 1785311999123 }` → res `{ "t_client": 1785311999123, "t_engine": 1785311999130 }`
+
+Both fields are **milliseconds since the Unix epoch**, as integers. `t_client` is echoed back
+verbatim so the client can match a reply to a send without consulting its own request table, and
+`t_engine` is the engine's clock at the moment it handled the request.
+
 The client computes RTT locally from its own send and receive timestamps; it does not trust
 `t_engine` for clock sync, only for one-way-delay estimation. There is no `pong` op — the `res`
 to `system.ping` is the pong.

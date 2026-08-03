@@ -7,99 +7,101 @@ Claude Code, one milestone per session.
 
 # Part 1 — One-time setup (Windows, PowerShell 7)
 
-## 1.1 Toolchain
+**Status: complete.** Everything in §1.1–§1.5 has been done and verified on the dev machine. This
+part is kept as a record of what the environment actually is, not as a list of things to run. The
+only outstanding item is the one flagged in §1.2.
 
-```powershell
-winget install --id Rustlang.Rustup -e
-winget install --id Git.Git -e
-winget install --id GitHub.cli -e
-winget install --id Microsoft.VisualStudio.2022.BuildTools -e   # MSVC linker, needed by Rust
-winget install --id Anthropic.ClaudeCode -e                      # or: npm i -g @anthropic-ai/claude-code
+## [x] 1.1 Toolchain — verified present
 
-rustup default stable
-rustup component add rustfmt clippy
-dart pub global activate fvm      # if fvm isn't already installed
-```
+| Tool | Version | Location / note |
+| --- | --- | --- |
+| `rustc` / `cargo` | 1.97.1 | target `x86_64-pc-windows-msvc` |
+| `rustfmt`, `clippy` | installed | `rustup component list --installed` confirms both |
+| `fvm` | 4.1.2 | `C:\ProgramData\chocolatey\bin\fvm.exe` — installed via Chocolatey, **not** `dart pub global activate` |
+| Flutter / Dart | 3.44.8 / 3.12.2 | cached by FVM as `stable`; bare `flutter` is deliberately absent from `PATH` |
+| `git` | 2.55.0 | |
+| `gh` | 2.97.0 | authed as `CipherSnowden`, git protocol `ssh` |
+| Visual Studio | Community **2026**, 18.8.12023.21 | `Microsoft.VisualStudio.Component.VC.Tools.x86.x64` present |
+| `cmake` | present | `F:\utilities\cmake` |
 
-Verify:
+Note the deviation from the original plan: the machine has **Visual Studio 2026 Community**, not
+the 2022 Build Tools. Rust links against it without complaint. Flutter is the open question —
+its Windows desktop toolchain check and CMake generator were written against VS 2022 (v17), and
+VS 2026 is v18.
 
-```powershell
-rustc --version ; cargo --version ; fvm --version ; git --version ; gh --version
-```
-
-MSVC Build Tools: select the **Desktop development with C++** workload. Rust needs the linker
-even though we write no C.
-
-## 1.2 Deal with the old repository
-
-Your existing `github.com/CipherSnowden/muxdeck` holds the pre-migration state. Recommended:
-rename and archive it, then create a clean `muxdeck`.
-
-```powershell
-gh repo rename muxdeck-legacy --repo CipherSnowden/muxdeck
-gh repo archive CipherSnowden/muxdeck-legacy --yes
-```
-
-Before archiving, clone it locally as reference — the old `input_win.go` and `input_linux.go`
-contain working keycode tables that are worth mining even though the engine is being rewritten
-in Rust:
-
-```powershell
-git clone https://github.com/CipherSnowden/muxdeck-legacy.git F:\reference\muxdeck-legacy
-```
-
-Keep that clone **outside** `F:\projects\muxdeck` so Claude Code never treats it as part of the
-new repo.
-
-## 1.3 Create the new repository
-
-```powershell
-cd F:\projects
-mkdir muxdeck
-cd muxdeck
-
-git init -b main
-gh repo create CipherSnowden/muxdeck --public --source=. --remote=origin `
-  --description "Open-source Stream Deck alternative — Flutter client, Rust engine, LAN only"
-```
-
-## 1.4 Drop in the documentation
-
-Place the files you were given:
-
-```
-F:\projects\muxdeck\
-├── CLAUDE.md
-└── docs\
-    ├── ARCHITECTURE.md
-    ├── PROTOCOL.md
-    ├── ENGINE.md
-    ├── CLIENT.md
-    ├── SERVER.md
-    └── BUILD-PLAN.md      (this file)
-```
-
-```powershell
-git add .
-git commit -m "docs: initial architecture, protocol and build plan"
-git push -u origin main
-```
-
-## 1.5 Start Claude Code
+**Before M0, run this and read the "Visual Studio — develop Windows apps" line:**
 
 ```powershell
 cd F:\projects\muxdeck
-claude
+fvm flutter doctor -v
 ```
 
-It reads `CLAUDE.md` automatically. Your first message should be:
+If Flutter does not recognise VS 2026, install the 2022 Build Tools alongside it — they coexist,
+and only `apps/server` on Windows is affected:
 
-> Read CLAUDE.md and every file in docs/. Summarise the architecture back to me in your own
-> words, then list anything in the specs that is ambiguous, contradictory, or that you would
-> need to guess at. Do not write any code yet.
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e   # Desktop development with C++
+```
 
-**Do not skip this step.** The gaps it finds are cheaper to fix in a doc than in three
-codebases.
+Nothing else is required. No Go, no MinGW, no Python, no `ninja`, no `usbmuxd`, no iTunes — the
+legacy quickstart's prerequisite list is obsolete and should not be followed.
+
+## [x] 1.2 The old repository — renamed and archived
+
+Done. `github.com/CipherSnowden/muxdeck-legacy` is private and archived, and is cloned locally at
+`F:\reference\muxdeck-legacy` — outside `F:\projects\muxdeck`, so Claude Code never treats it as
+part of the new repo. Its `input_win.go` (9 KB) and `input_linux.go` (13 KB) hold working keycode
+tables worth mining in M3 and M7.
+
+> **[ ] Outstanding — do this once.** That clone was made *before* the rename, so its `origin` is
+> `git@github.com:CipherSnowden/muxdeck.git` — which now points at the **new** repo. A stray
+> `git push` from `F:\reference\muxdeck-legacy` would push legacy Go history into this project.
+>
+> ```powershell
+> git -C F:\reference\muxdeck-legacy remote set-url origin git@github.com:CipherSnowden/muxdeck-legacy.git
+> ```
+
+## [x] 1.3 The new repository — created
+
+`github.com/CipherSnowden/muxdeck` exists, public, described "Open-source Stream Deck alternative
+— Flutter client, Rust engine, LAN only", with `origin` wired over SSH and `main` as the default
+branch.
+
+## [x] 1.4 Documentation — in place and pushed
+
+`CLAUDE.md` plus `docs/{ARCHITECTURE,PROTOCOL,ENGINE,CLIENT,SERVER,BUILD-PLAN}.md`, pushed across
+four commits. `docs/TRANSPORT.md` was added later — see §1.6.
+
+## [x] 1.5 Spec review — done
+
+The review step ("summarise the architecture back to me, then list anything ambiguous or
+contradictory") has been run. It produced the decisions in §1.6 and the protocol gap-fills now
+merged into `docs/PROTOCOL.md`. Do not re-run it; read §1.6 instead.
+
+## 1.6 Decisions taken after the spec review
+
+Four decisions are settled. Each is recorded where the detail belongs; this section exists so a
+future session finds them without archaeology.
+
+- **No USB, no BLE — Wi-Fi/LAN only.** The project's earlier USB-first design could not have
+  worked: `usbmuxd`/`iproxy` forwards host→device only and has no reverse tunnel, so iOS USB would
+  require inverting the client/server roles, the pinning direction and the challenge direction for
+  one platform. Android USB via `adb reverse` does work and is the only option worth revisiting.
+  Full reasoning: **`docs/TRANSPORT.md`**. Rule: `CLAUDE.md` constraint #1.
+
+- **iOS/iPadOS is CI-build only.** No Mac on the dev machine. `apps/client` keeps `ios` in
+  `--platforms` and CI gets a `macos-latest` job from M0 onward, but iOS is never built locally.
+  Releases ship an unsigned IPA (`fvm flutter build ios --release --no-codesign`, zipped as
+  `Payload/Runner.app`) for sideloading via Sideloadly or AltStore. iPad layout is verified by
+  widget tests at iPad dimensions plus an Android tablet as the physical proxy.
+
+- **Milestone order is M0 → M9 as written.** No vertical spike, no reordering. M2 is the security
+  backbone and is worth reviewing before code exists, which is why it is not deferred behind M3.
+
+- **`docs/PROTOCOL.md` gaps were filled before M1.** `action.list`/`set`/`delete`, `settings.get`
+  request shape, `settings.set` example, the literal `qr_payload` construction, `system.ping`
+  units, and the `profile.get` response wrapper all now have documented payloads. M1 could not
+  write one fixture per message shape without them. No existing shape was changed.
 
 ---
 
@@ -117,25 +119,37 @@ Repository skeleton, tooling config, CI that runs and does nothing useful yet.
 > Implement milestone M0 from docs/BUILD-PLAN.md.
 >
 > Create the monorepo skeleton exactly as laid out in CLAUDE.md: the directory tree, a root
-> README.md, an MIT LICENSE (author: CipherSnowden, 2026), .gitignore covering Rust, Flutter,
-> Dart, and OS junk, and .editorconfig.
+> README.md, an MIT LICENSE (author: CipherSnowden, 2026), and .editorconfig.
+>
+> Expand .gitignore. The current one is eight lines and will let Flutter ephemerals into the
+> repo. It must also cover `**/ios/Pods/`, `**/ios/Flutter/Flutter.framework`,
+> `**/windows/flutter/ephemeral/`, `**/macos/Flutter/ephemeral/`,
+> `**/linux/flutter/ephemeral/`, `.flutter-plugins`, `.flutter-plugins-dependencies`,
+> `pubspec_overrides.yaml`, `**/android/local.properties`, and `.vscode/`.
+> **Cargo.lock must be committed, not ignored** — muxdeckd is a binary, not a library.
 >
 > Scaffold the Rust workspace under engine/ with the four crates from docs/ENGINE.md §2, each
 > compiling as an empty stub with its dependency direction wired correctly. Pin the toolchain in
-> rust-toolchain.toml.
+> rust-toolchain.toml to 1.97.1.
 >
-> Print the exact `fvm flutter create` and `fvm dart create` commands I should run for
-> apps/client, apps/server and packages/muxdeck_protocol — do not run them yourself, I will run
-> them so FVM resolves correctly on my machine.
+> Run the `fvm flutter create` / `fvm dart create` commands from docs/CLIENT.md §1 and
+> docs/SERVER.md §2 yourself — FVM 4.1.2 is installed and resolves `stable` to Flutter 3.44.8, so
+> there is no reason to hand them back. Follow each with `fvm use stable` in the project
+> directory. Do not add web to any --platforms list.
 >
-> Add .github/workflows/ with three workflows (engine, client, server) using path filters so
-> each only runs on changes to its own area. For now they should just check out, install the
-> toolchain, and run fmt/analyze — no builds yet.
+> Add .github/workflows/ with four workflows using path filters so each only runs on changes to
+> its own area:
+>   - engine.yml   — windows/macos/ubuntu matrix; cargo fmt --check, clippy -D warnings, cargo test
+>   - protocol.yml — packages/muxdeck_protocol; fvm dart analyze + fvm dart test
+>   - client.yml   — apps/client; analyze + test on ubuntu, PLUS a macos-latest job that runs
+>                    `fvm flutter build ios --release --no-codesign`. That iOS job is the only
+>                    thing standing between iPad support and silent bitrot — it goes in now, not
+>                    at M9.
+>   - server.yml   — apps/server; analyze + test
+> For now everything beyond the iOS job is fmt/analyze only — no release builds.
 >
-> Verify `cargo check --workspace` passes, then commit.
-
-After this, run the printed Flutter/Dart create commands, then `fvm use stable` in each Flutter
-project, and commit the result.
+> Verify `cargo check --workspace` passes and `fvm flutter analyze` is clean in both apps, then
+> commit.
 
 ---
 
@@ -247,6 +261,11 @@ The first end-to-end moment. This is the milestone that proves the whole design.
 To pair before the desktop panel exists, run `muxdeckd pair begin` — it prints the 6-digit code
 and the QR payload for the phone to scan or for manual entry.
 
+**Verify on a physical Android device on the same Wi-Fi.** An emulator will not exercise mDNS
+realistically, and mDNS is the part most likely to break. iOS cannot be verified locally (§1.6) —
+get `NSBonjourServices` right the first time, because finding that mistake later costs a CI round
+trip per attempt.
+
 ---
 
 ## [ ] M5 — Desktop control panel
@@ -297,7 +316,9 @@ Needs CI or real machines. Do the platform you have access to first.
 > CGEventKeyboardSetUnicodeString for text, and the NSSystemDefined path for media keys) with
 > preflight checking AXIsProcessTrustedWithOptions.
 >
-> Implement the Linux backend via /dev/uinput: register the full keybit range at device creation,
+> Implement the Linux backend via /dev/uinput, mining the keycode table in
+> F:\reference\muxdeck-legacy\muxdeck-engine\input_linux.go but re-deriving it against
+> docs/PROTOCOL.md §5: register the full keybit range at device creation,
 > sleep ~100ms after creation before the first event, emit SYN_REPORT after each batch, and have
 > preflight return a specific message naming the `input` group fix when /dev/uinput is not
 > writable. Ship the udev rule and wire it into `service install`.

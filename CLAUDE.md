@@ -21,7 +21,9 @@ keyboard, mouse, and media input into the host OS.
 
 1. **Wi-Fi / LAN only.** There is no USB transport and no Bluetooth transport. Do not
    add `usbmuxd`, `iproxy`, `libimobiledevice`, `adb reverse`, BLE, or any USB tooling.
-   If a task seems to need it, stop and ask.
+   If a task seems to need it, stop and ask. The rationale, the cost of revisiting, and why the
+   project's earlier USB-first design could not have worked are in `docs/TRANSPORT.md` — read it
+   before proposing a transport change.
 2. **No web platform.** The Flutter client targets Android + iOS/iPadOS only. The Flutter
    desktop app targets Windows + macOS + Linux only. Never run
    `flutter create --platforms=...web` or add web support. (Reason: browsers cannot pin a
@@ -53,6 +55,7 @@ muxdeck/
 │   ├── ENGINE.md              Rust daemon spec
 │   ├── CLIENT.md              Flutter mobile client spec
 │   ├── SERVER.md              Flutter desktop control panel spec
+│   ├── TRANSPORT.md           why Wi-Fi only; what USB would cost
 │   └── BUILD-PLAN.md          milestones M0–M9 and per-milestone prompts
 ├── protocol/
 │   └── fixtures/              canonical JSON message samples, parsed by BOTH test suites
@@ -87,13 +90,36 @@ edited at once.
 | `apps/client/**` | `docs/CLIENT.md`, then `docs/PROTOCOL.md` |
 | `apps/server/**` | `docs/SERVER.md`, then `docs/PROTOCOL.md` |
 | pairing, tokens, TLS, trust | `docs/ARCHITECTURE.md` §Security |
+| USB, BLE, or anything below `Transport` | `docs/TRANSPORT.md` |
 | "what do I build next" | `docs/BUILD-PLAN.md` |
 
 ---
 
+## Toolchain
+
+Pinned versions this repo is developed against. Verified on the dev machine, not assumed.
+
+| Tool | Version | Notes |
+| --- | --- | --- |
+| Rust | 1.97.1 stable | target `x86_64-pc-windows-msvc`; `rustfmt` + `clippy` installed |
+| Flutter | 3.44.8 (`stable`) | always via `fvm`; bare `flutter` is deliberately not on `PATH` |
+| Dart | 3.12.2 | ships with the above |
+| FVM | 4.1.2 | installed via Chocolatey |
+| Visual Studio | Community **2026** (18.x) | `Desktop development with C++`; supplies the MSVC linker Rust needs and the toolchain `apps/server` builds against |
+| GitHub CLI | 2.97.0 | authed as `CipherSnowden`, git protocol `ssh` |
+
+There is no Go, no MinGW/GCC, no Python and no `ninja` in this project's toolchain, and none is
+needed. If something appears to require one, that is a signal to re-read the spec, not to install it.
+
 ## Command cheat sheet
 
-Development machine is **Windows** (PowerShell 7). macOS/Linux builds happen in CI.
+Development machine is **Windows** (PowerShell 7). macOS and Linux builds happen in CI.
+
+**iOS/iPadOS is CI-build only.** There is no Mac on the dev machine, so `apps/client` can never be
+built or run locally for iOS — only analyzed and unit/widget tested. iOS artefacts come from the
+`macos-latest` runner, and releases ship an unsigned IPA for sideloading. Keep the iOS
+configuration (`Info.plist`, `NSBonjourServices`) correct from the moment it is written; a mistake
+there costs a CI round trip per attempt to find.
 
 ```powershell
 # Engine
