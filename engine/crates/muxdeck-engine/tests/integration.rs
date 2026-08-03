@@ -385,6 +385,233 @@ async fn an_admin_socket_receives_events_a_deck_does_not() {
     assert!(event["devices"].is_array());
 }
 
+// --- the live layout loop ---------------------------------------------------
+//
+// The claim M6 exists to make: edit on the desktop, and the tablet updates. Proven here at the
+// protocol level, so the only thing left for a real device is that it re-renders.
+
+/// Waits for an event with the given op, or gives up.
+///
+/// Bounded because the interesting assertion is often that an event *does not* arrive, and an
+/// unbounded read would hang the suite rather than fail it.
+async fn await_event(
+    client: &mut TestClient,
+    op: KnownOp,
+    timeout: std::time::Duration,
+) -> Option<Value> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return None;
+        }
+        match tokio::time::timeout(remaining, client.next_frame()).await {
+            Ok(Some(frame)) if frame.t == MessageType::Evt && frame.op == Op::of(op) => {
+                return Some(frame.d);
+            }
+            Ok(Some(_)) => continue,
+            Ok(None) | Err(_) => return None,
+        }
+    }
+}
+
+#[tokio::test]
+async fn an_edit_reaches_a_subscribed_deck() {
+    let harness = Harness::start("live_loop").await;
+    let (key, device_id) = pair_device(&harness, 41).await;
+    let mut deck = authenticate(&harness, &key, &device_id).await;
+
+    deck.call(KnownOp::ProfileSubscribe, json!({}))
+        .await
+        .expect("profile.subscribe");
+
+    // The panel edits, as it would when a button is changed in the editor.
+    let mut admin = harness.admin().await;
+    let profile = admin
+        .request(KnownOp::ProfileGet, &json!({ "profile_id": "p_default" }))
+        .await
+        .expect("profile.get");
+
+    let mut edited = profile["profile"].clone();
+    edited["name"] = json!("Renamed by the editor");
+    admin
+        .request(KnownOp::ProfileSet, &json!({ "profile": edited }))
+        .await
+        .expect("profile.set");
+
+    let event = await_event(
+        &mut deck,
+        KnownOp::ProfileChanged,
+        std::time::Duration::from_secs(5),
+    )
+    .await
+    .expect("a subscribed deck must receive profile.changed");
+
+    assert_eq!(
+        event["profile"]["name"], "Renamed by the editor",
+        "the event must carry the edited profile, not a stale one"
+    );
+}
+
+#[tokio::test]
+async fn an_unsubscribed_deck_receives_no_layout_events() {
+    // Subscription is explicit. A deck that never asked must not be sent layout traffic it has
+    // no use for. `docs/PROTOCOL.md` §3.
+    let harness = Harness::start("no_subscribe").await;
+    let (key, device_id) = pair_device(&harness, 42).await;
+    let mut deck = authenticate(&harness, &key, &device_id).await;
+
+    let mut admin = harness.admin().await;
+    let profile = admin
+        .request(KnownOp::ProfileGet, &json!({ "profile_id": "p_default" }))
+        .await
+        .expect("profile.get");
+    admin
+        .request(
+            KnownOp::ProfileSet,
+            &json!({ "profile": profile["profile"] }),
+        )
+        .await
+        .expect("profile.set");
+
+    let event = await_event(
+        &mut deck,
+        KnownOp::ProfileChanged,
+        std::time::Duration::from_millis(800),
+    )
+    .await;
+    assert!(
+        event.is_none(),
+        "an unsubscribed socket must receive nothing"
+    );
+}
+
+#[tokio::test]
+async fn a_deck_never_receives_device_events() {
+    // Device and pairing state are admin-only. Before M6 the routing was role-gated rather than
+    // audience-gated, and a subscribed deck would have seen everything the panel does.
+    let harness = Harness::start("deck_no_device_events").await;
+    let (key, device_id) = pair_device(&harness, 43).await;
+    let mut deck = authenticate(&harness, &key, &device_id).await;
+
+    deck.call(KnownOp::ProfileSubscribe, json!({}))
+        .await
+        .expect("subscribe to everything a deck may have");
+
+    // Pairing another device publishes device.changed and pairing.state.
+    pair_device(&harness, 44).await;
+
+    let event = await_event(
+        &mut deck,
+        KnownOp::DeviceChanged,
+        std::time::Duration::from_millis(800),
+    )
+    .await;
+    assert!(
+        event.is_none(),
+        "a deck must never learn about other devices"
+    );
+}
+
+#[tokio::test]
+async fn a_deck_may_activate_a_profile_but_not_edit_one() {
+    // `profile.activate` is deck-callable on purpose — a device that can already inject
+    // keystrokes gains nothing by choosing which grid it shows, and "switch to my streaming
+    // profile" must work with the panel closed. Editing is a different matter.
+    let harness = Harness::start("deck_profile_rights").await;
+    let (key, device_id) = pair_device(&harness, 45).await;
+    let mut deck = authenticate(&harness, &key, &device_id).await;
+
+    deck.call(
+        KnownOp::ProfileActivate,
+        json!({ "profile_id": "p_default" }),
+    )
+    .await
+    .expect("a deck may activate");
+
+    let profile = deck
+        .call(KnownOp::ProfileGet, json!({ "profile_id": "p_default" }))
+        .await
+        .expect("a deck may read its own layout");
+
+    let err = deck
+        .call(
+            KnownOp::ProfileSet,
+            json!({ "profile": profile["profile"] }),
+        )
+        .await
+        .expect_err("a deck must not edit");
+    assert_eq!(err.code, ErrorCode::NotAuthorized);
+}
+
+#[tokio::test]
+async fn a_fresh_engine_serves_a_usable_default_layout() {
+    // A new install landing on an empty grid would look broken.
+    let harness = Harness::start("default_layout").await;
+    let mut admin = harness.admin().await;
+
+    let response = admin
+        .request(KnownOp::ProfileGet, &json!({ "profile_id": "p_default" }))
+        .await
+        .expect("the default profile must exist");
+
+    let profile = &response["profile"];
+    assert_eq!(profile["grid"]["cols"], 5);
+    assert_eq!(profile["grid"]["rows"], 3);
+    assert!(
+        profile["pages"][0]["buttons"]
+            .as_array()
+            .expect("buttons")
+            .len()
+            >= 10,
+        "the default should be worth pressing, not a token single button"
+    );
+}
+
+#[tokio::test]
+async fn an_invalid_profile_is_refused_with_a_specific_message() {
+    // Never last-write-wins, never silent coercion: a layout quietly altered on the way in is
+    // worse than one refused, because the user cannot see what happened.
+    let harness = Harness::start("invalid_profile").await;
+    let mut admin = harness.admin().await;
+
+    let err = admin
+        .request(
+            KnownOp::ProfileSet,
+            &json!({
+                "profile": {
+                    "id": "p_bad",
+                    "name": "Out of bounds",
+                    "grid": { "cols": 2, "rows": 2 },
+                    "pages": [{
+                        "id": "pg_1",
+                        "name": "Main",
+                        "buttons": [{
+                            "id": "b_1",
+                            "pos": { "col": 9, "row": 9 },
+                            "label": "Nowhere",
+                            "icon": "circle",
+                            "color": "#000000",
+                            "haptic": "none",
+                            "on_tap": null,
+                            "on_long_press": null
+                        }]
+                    }]
+                }
+            }),
+        )
+        .await
+        .expect_err("a button outside the grid must be refused");
+
+    let payload = err.to_payload();
+    assert_eq!(payload.code, ErrorCode::BadRequest);
+    assert!(
+        payload.message.contains("outside"),
+        "the message must say what is wrong, not just that something is: {}",
+        payload.message
+    );
+}
+
 #[tokio::test]
 async fn an_unauthenticated_socket_is_closed_after_the_timeout() {
     // A 10-second wait is too slow for the suite, so this asserts the socket is still open

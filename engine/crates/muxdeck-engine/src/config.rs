@@ -77,6 +77,11 @@ impl Paths {
         self.root.join("settings.json")
     }
 
+    /// Deck layouts.
+    pub fn profiles(&self) -> PathBuf {
+        self.root.join("profiles.json")
+    }
+
     pub fn logs(&self) -> PathBuf {
         self.root.join("logs")
     }

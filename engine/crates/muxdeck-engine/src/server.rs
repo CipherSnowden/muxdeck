@@ -15,7 +15,8 @@ use axum_server::tls_rustls::RustlsConfig;
 use muxdeck_core::{
     AuthRequest, Empty, Envelope, ErrorCode, HelloRequest, KnownOp, MessageType, Op,
     PairBeginRequest, PairBeginResponse, PairListDevicesResponse, PairRequest, PairResponse,
-    PairRevokeRequest, PairingState, PingRequest, PingResponse, Role,
+    PairRevokeRequest, PairingState, PingRequest, PingResponse, ProfileActivateRequest,
+    ProfileDeleteRequest, ProfileGetRequest, ProfileListResponse, ProfileWrapper, Role,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -31,9 +32,50 @@ use crate::pairing::verify_pair_request;
 use crate::registry::unix_now_millis;
 use crate::session::{HandshakeContext, Session, AUTH_TIMEOUT};
 
-/// Events pushed to `admin` sockets, pre-serialised once for every subscriber.
+/// Who an event is for.
+///
+/// A direct transcription of the "Delivered to" column of `docs/PROTOCOL.md` §4.9. Every event
+/// is routed by one of these rather than by an ad-hoc check at the send site, so the table and
+/// the code cannot drift apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventAudience {
+    /// Sockets that called `profile.subscribe`, whatever their role.
+    ///
+    /// Deliberately not admin-only: "edit on the desktop and the tablet updates" *is* a
+    /// `profile.changed` reaching a deck.
+    ProfileSubscribers,
+    /// Sockets that called `telemetry.subscribe`, whatever their role.
+    TelemetrySubscribers,
+    /// `admin` only — device and pairing state are not a deck's business.
+    AdminOnly,
+    /// Every authenticated socket, subscribed or not.
+    AllAuthenticated,
+}
+
+impl EventAudience {
+    /// The audience for an event op.
+    pub fn for_op(op: KnownOp) -> Self {
+        match op {
+            KnownOp::ProfileChanged => EventAudience::ProfileSubscribers,
+            KnownOp::TelemetryUpdate => EventAudience::TelemetrySubscribers,
+            KnownOp::DeviceChanged | KnownOp::PairingState => EventAudience::AdminOnly,
+            KnownOp::EngineShutdown => EventAudience::AllAuthenticated,
+            // Not an event; nothing will ever be published under it.
+            _ => EventAudience::AdminOnly,
+        }
+    }
+}
+
+/// One event, serialised once and filtered per socket on receipt.
 #[derive(Clone)]
-pub struct EventBus(broadcast::Sender<String>);
+struct Event {
+    audience: EventAudience,
+    frame: String,
+}
+
+/// Events pushed to connected sockets.
+#[derive(Clone)]
+pub struct EventBus(broadcast::Sender<Event>);
 
 impl EventBus {
     pub fn new() -> Self {
@@ -43,15 +85,18 @@ impl EventBus {
     pub fn publish<T: Serialize>(&self, op: KnownOp, payload: &T) {
         match event_frame(op, payload) {
             Ok(frame) => {
-                // An error here only means nobody is subscribed, which is the normal case when
-                // the control panel is closed.
-                let _ = self.0.send(frame);
+                // An error here only means nobody is listening, which is the normal case when
+                // the control panel is closed and no deck has subscribed.
+                let _ = self.0.send(Event {
+                    audience: EventAudience::for_op(op),
+                    frame,
+                });
             }
             Err(e) => warn!(error = %e, op = op.as_str(), "could not serialise an event"),
         }
     }
 
-    fn subscribe(&self) -> broadcast::Receiver<String> {
+    fn subscribe(&self) -> broadcast::Receiver<Event> {
         self.0.subscribe()
     }
 }
@@ -164,17 +209,21 @@ async fn connection(mut socket: WebSocket, peer: SocketAddr, state: AppState) {
                 }
             },
 
-            // Events go only to the control panel. `docs/ARCHITECTURE.md` §5.4.
-            event = events.recv(), if session.role() == Some(Role::Admin) => {
+            // Every authenticated socket listens; what it actually receives is decided per
+            // event by `Session::wants`, against the table in `docs/PROTOCOL.md` §4.9.
+            event = events.recv(), if session.is_ready() => {
                 match event {
-                    Ok(frame) => {
-                        if socket.send(Message::Text(frame.into())).await.is_err() {
+                    Ok(event) => {
+                        if !session.wants(event.audience) {
+                            continue;
+                        }
+                        if socket.send(Message::Text(event.frame.into())).await.is_err() {
                             break;
                         }
                         continue;
                     }
                     Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                        warn!(%peer, skipped, "an admin socket fell behind the event stream");
+                        warn!(%peer, skipped, "a socket fell behind the event stream");
                         continue;
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
@@ -458,6 +507,71 @@ fn handle_envelope(
                 t_client: request.t_client,
                 t_engine: unix_now_millis(),
             })
+        }
+
+        KnownOp::ProfileGet => {
+            let request: ProfileGetRequest = payload(envelope.d)?;
+            let profile = engine
+                .with_store(|store| store.get(&request.profile_id).cloned())
+                .ok_or_else(|| EngineError::wire(ErrorCode::NotFound, "no such profile"))?;
+            value(&ProfileWrapper { profile })
+        }
+
+        KnownOp::ProfileList => value(&ProfileListResponse {
+            profiles: engine.with_store(|store| store.list()),
+        }),
+
+        KnownOp::ProfileSubscribe => {
+            // Explicit opt-in: the engine pushes nothing unasked, so a deck that wants live
+            // layout updates says so. `docs/PROTOCOL.md` §3.
+            session.subscribe_profile();
+            value(&Empty {})
+        }
+
+        KnownOp::ProfileSet => {
+            let request: ProfileWrapper = payload(envelope.d)?;
+            let role = session.role().unwrap_or(Role::Deck);
+            let profile = request.profile;
+
+            engine.with_store(|store| store.set(profile.clone(), role))?;
+
+            // The live loop. A subscribed deck re-renders without being asked, which is what
+            // makes the editor pleasant to use.
+            state
+                .events
+                .publish(KnownOp::ProfileChanged, &ProfileWrapper { profile });
+            value(&Empty {})
+        }
+
+        KnownOp::ProfileActivate => {
+            let request: ProfileActivateRequest = payload(envelope.d)?;
+            engine.with_store(|store| store.activate(&request.profile_id))?;
+
+            // Switching profiles changes what every deck should be showing, so the new layout
+            // goes out the same way an edit does.
+            if let Some(profile) = engine.with_store(|store| store.active().cloned()) {
+                state
+                    .events
+                    .publish(KnownOp::ProfileChanged, &ProfileWrapper { profile });
+            }
+            value(&Empty {})
+        }
+
+        KnownOp::ProfileDelete => {
+            let request: ProfileDeleteRequest = payload(envelope.d)?;
+            engine.with_store(|store| store.delete(&request.profile_id))?;
+
+            if let Some(profile) = engine.with_store(|store| store.active().cloned()) {
+                state
+                    .events
+                    .publish(KnownOp::ProfileChanged, &ProfileWrapper { profile });
+            }
+            value(&Empty {})
+        }
+
+        KnownOp::TelemetrySubscribe => {
+            session.subscribe_telemetry();
+            value(&Empty {})
         }
 
         // Input is the one group that is deliberately not handled here: every arm awaits, and

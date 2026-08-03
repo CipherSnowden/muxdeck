@@ -36,7 +36,7 @@ pub use pairing::{
     PairResponse, PairRevokeRequest, PairingState,
 };
 pub use profile::{
-    Button, ButtonAction, Grid, Haptic, Position, Profile, ProfileActivateRequest,
+    Button, ButtonAction, Grid, Haptic, Page, Position, Profile, ProfileActivateRequest,
     ProfileDeleteRequest, ProfileGetRequest, ProfileListResponse, ProfileSummary, ProfileWrapper,
 };
 pub use session::{

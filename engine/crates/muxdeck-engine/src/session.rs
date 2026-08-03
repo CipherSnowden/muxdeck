@@ -67,10 +67,18 @@ enum State {
     },
 }
 
-/// One socket's authentication state.
+/// One socket's authentication state, and what it has asked to be told about.
 pub struct Session {
     peer: SocketAddr,
     state: State,
+    /// Set by `profile.subscribe`.
+    ///
+    /// Subscription is explicit: the engine pushes nothing on its own after the handshake, so a
+    /// client that wants live layout updates must ask (`docs/PROTOCOL.md` §3).
+    profile_subscribed: bool,
+    /// Set by `telemetry.subscribe`. Separate from the profile flag on purpose — telemetry has
+    /// its own subscription and is not implied by `profile.subscribe`.
+    telemetry_subscribed: bool,
 }
 
 impl Session {
@@ -78,6 +86,35 @@ impl Session {
         Self {
             peer,
             state: State::Unauthenticated,
+            profile_subscribed: false,
+            telemetry_subscribed: false,
+        }
+    }
+
+    pub fn subscribe_profile(&mut self) {
+        self.profile_subscribed = true;
+    }
+
+    pub fn subscribe_telemetry(&mut self) {
+        self.telemetry_subscribed = true;
+    }
+
+    /// Whether this socket should receive an event with the given audience.
+    ///
+    /// The whole of `docs/PROTOCOL.md` §4.9's delivery column, in one place. An unauthenticated
+    /// socket receives nothing at all — it has no role to check and no business being told
+    /// about the host's state.
+    pub fn wants(&self, audience: crate::server::EventAudience) -> bool {
+        use crate::server::EventAudience as A;
+
+        if !self.is_ready() {
+            return false;
+        }
+        match audience {
+            A::ProfileSubscribers => self.profile_subscribed,
+            A::TelemetrySubscribers => self.telemetry_subscribed,
+            A::AdminOnly => self.role() == Some(Role::Admin),
+            A::AllAuthenticated => true,
         }
     }
 
@@ -247,6 +284,8 @@ pub mod tests_support {
                 role: Role::Deck,
                 device_id: Some("d_7f3a91c2b4e05d18".to_string()),
             },
+            profile_subscribed: false,
+            telemetry_subscribed: false,
         }
     }
 
@@ -257,6 +296,8 @@ pub mod tests_support {
                 role: Role::Admin,
                 device_id: None,
             },
+            profile_subscribed: false,
+            telemetry_subscribed: false,
         }
     }
 }
@@ -571,6 +612,106 @@ mod tests {
 
         let err = session.handle_hello(&request, &ctx).expect_err("neither");
         assert_eq!(err.to_payload().code, ErrorCode::BadRequest);
+    }
+
+    // --- event delivery ---------------------------------------------------
+    //
+    // A transcription of `docs/PROTOCOL.md` §4.9's delivery column. The negatives matter as much
+    // as the positives: before M6 every event went to admin sockets unconditionally and to deck
+    // sockets never, which made the live layout loop impossible and leaked device state.
+
+    #[test]
+    fn an_unsubscribed_socket_receives_no_profile_or_telemetry_events() {
+        use crate::server::EventAudience as A;
+
+        for session in [tests_support::ready_deck(), tests_support::ready_admin()] {
+            assert!(
+                !session.wants(A::ProfileSubscribers),
+                "subscription is explicit; the engine pushes nothing unasked"
+            );
+            assert!(!session.wants(A::TelemetrySubscribers));
+        }
+    }
+
+    #[test]
+    fn a_subscribed_deck_receives_profile_changed() {
+        // The whole point of M6: an edit on the desktop reaches the tablet.
+        use crate::server::EventAudience as A;
+
+        let mut session = tests_support::ready_deck();
+        session.subscribe_profile();
+
+        assert!(session.wants(A::ProfileSubscribers));
+        assert!(
+            !session.wants(A::TelemetrySubscribers),
+            "telemetry has its own subscription and is not implied by profile.subscribe"
+        );
+    }
+
+    #[test]
+    fn a_deck_never_receives_admin_only_events() {
+        use crate::server::EventAudience as A;
+
+        let mut session = tests_support::ready_deck();
+        session.subscribe_profile();
+        session.subscribe_telemetry();
+
+        assert!(
+            !session.wants(A::AdminOnly),
+            "device and pairing state are not a deck's business, subscribed or not"
+        );
+        assert!(tests_support::ready_admin().wants(A::AdminOnly));
+    }
+
+    #[test]
+    fn shutdown_reaches_every_authenticated_socket_regardless_of_subscription() {
+        use crate::server::EventAudience as A;
+
+        assert!(tests_support::ready_deck().wants(A::AllAuthenticated));
+        assert!(tests_support::ready_admin().wants(A::AllAuthenticated));
+    }
+
+    #[test]
+    fn an_unauthenticated_socket_receives_nothing_at_all() {
+        use crate::server::EventAudience as A;
+
+        // Not even shutdown: a socket that has not proven who it is has no business being told
+        // anything about the host.
+        let session = tests_support::unauthenticated();
+        for audience in [
+            A::ProfileSubscribers,
+            A::TelemetrySubscribers,
+            A::AdminOnly,
+            A::AllAuthenticated,
+        ] {
+            assert!(
+                !session.wants(audience),
+                "{audience:?} must not reach a pre-auth socket"
+            );
+        }
+    }
+
+    #[test]
+    fn every_event_op_maps_to_the_documented_audience() {
+        use crate::server::EventAudience as A;
+        use muxdeck_core::KnownOp as O;
+
+        // Hand-transcribed from the table rather than derived from the code, so the two are
+        // checked against each other rather than against themselves.
+        for (op, expected) in [
+            (O::ProfileChanged, A::ProfileSubscribers),
+            (O::TelemetryUpdate, A::TelemetrySubscribers),
+            (O::DeviceChanged, A::AdminOnly),
+            (O::PairingState, A::AdminOnly),
+            (O::EngineShutdown, A::AllAuthenticated),
+        ] {
+            assert_eq!(
+                A::for_op(op),
+                expected,
+                "{} has the wrong audience",
+                op.as_str()
+            );
+        }
     }
 
     #[test]

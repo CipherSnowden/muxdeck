@@ -11,6 +11,7 @@ use crate::error::Result;
 use crate::identity::Identity;
 use crate::pairing::PairingWindow;
 use crate::registry::Registry;
+use crate::store::Store;
 
 /// State shared by every socket, plus the identity and settings loaded at startup.
 pub struct Engine {
@@ -27,6 +28,7 @@ pub struct Engine {
     /// The platform input backend. `Arc` rather than `Box` because every injection is handed
     /// to `spawn_blocking`, which needs an owned handle.
     input: Arc<dyn InputBackend>,
+    store: Mutex<Store>,
 }
 
 impl Engine {
@@ -34,6 +36,7 @@ impl Engine {
         let identity = Identity::load_or_generate(&paths)?;
         let settings = load_settings(&paths)?;
         let registry = Registry::load(&paths.devices())?;
+        let store = Store::load(&paths.profiles())?;
         let port = settings.port;
 
         Ok(Arc::new(Self {
@@ -45,6 +48,7 @@ impl Engine {
             connected: Mutex::new(HashSet::new()),
             port: RwLock::new(port),
             input: Arc::from(platform_backend()),
+            store: Mutex::new(store),
         }))
     }
 
@@ -109,9 +113,13 @@ impl Engine {
         })
     }
 
-    /// Placeholder until the profile store lands in M6.
+    /// The profile a newly connected deck should display.
     pub fn active_profile_id(&self) -> String {
-        "p_default".to_string()
+        self.store.lock().expect("store lock poisoned").active_id()
+    }
+
+    pub fn with_store<T>(&self, f: impl FnOnce(&mut Store) -> T) -> T {
+        f(&mut self.store.lock().expect("store lock poisoned"))
     }
 
     pub fn with_registry<T>(&self, f: impl FnOnce(&mut Registry) -> T) -> T {

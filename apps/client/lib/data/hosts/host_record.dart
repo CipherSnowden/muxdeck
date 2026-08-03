@@ -91,8 +91,9 @@ class PairingPayload {
 
   static PairingPayload? tryParse(String raw) {
     final uri = Uri.tryParse(raw.trim());
-    if (uri == null || uri.scheme != 'muxdeck' || uri.host != 'pair')
+    if (uri == null || uri.scheme != 'muxdeck' || uri.host != 'pair') {
       return null;
+    }
 
     final address = uri.queryParameters['addr'];
     final hostId = uri.queryParameters['host'];

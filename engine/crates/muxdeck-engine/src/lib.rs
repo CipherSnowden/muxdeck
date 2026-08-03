@@ -20,6 +20,7 @@ pub mod secret_file;
 pub mod server;
 pub mod service;
 pub mod session;
+pub mod store;
 
 pub use engine::Engine;
 pub use error::{EngineError, Result};
