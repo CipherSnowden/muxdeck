@@ -47,8 +47,15 @@ fingerprint-pinning logic from `docs/CLIENT.md` §3 applies. The panel reads the
 shelling out to `muxdeckd --print-fingerprint`, or by reading the certificate directly from the
 config directory — it does not need a QR code, because it is already on the machine.
 
-`admin` role is granted by the engine based on the source address being loopback. The panel does
-not request it and cannot obtain it remotely.
+`admin` is granted by the engine only when the connection is **both** from loopback **and**
+presenting the local admin token. The panel reads `admin.token` from the same config directory
+and sends it in `session.hello` in place of a `device_id`; the response is a `Ready` payload
+directly, with no challenge round trip and no `session.auth`. See `docs/ARCHITECTURE.md` §5.4 —
+the token exists because loopback alone would also admit a second logged-in user on a
+multi-user desktop.
+
+The panel therefore has no device identity, no keypair, and never pairs itself. It cannot obtain
+`admin` remotely, and it cannot request the role at all.
 
 ## 5. Daemon lifecycle
 
@@ -101,8 +108,14 @@ Auto-closes and returns to Devices on success (`evt device.changed`).
 The most valuable screen and the reason this app exists.
 
 - Visual grid matching the profile's dimensions; click a cell to edit.
-- Per-button editor: label, Material icon picker, colour, haptic strength, tap action, long-press
-  action.
+- Per-button editor: label, icon picker, colour, haptic strength, tap action, long-press action.
+- The icon picker offers **only** the names in `packages/muxdeck_protocol`'s
+  `lib/src/icon_map.dart`, the same curated map the client renders from — so the picker can never
+  offer a name the deck would draw as a blank. See `docs/CLIENT.md` §5.
+- **Assigning a long-press action shows a small latency warning.** Buttons without one fire on
+  pointer down; buttons with one must wait for tap-up so a long press can be distinguished
+  (`docs/CLIENT.md` §6). That button will feel slower, and the user should find that out here
+  rather than by wondering why one key feels wrong.
 - Action editor is op-aware: choosing `input.key_combo` gives a key-capture field ("press the
   combo you want") that records real keys and maps them to the canonical names in
   `docs/PROTOCOL.md` §5. Choosing `input.media` gives a dropdown. Choosing `action.run` gives a

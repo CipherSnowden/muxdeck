@@ -70,7 +70,15 @@ pub trait InputBackend: Send + Sync {
 
 `preflight()` is important: it is what lets the control panel say *"grant Accessibility
 permission"* instead of buttons silently doing nothing. Call it at startup and expose the
-result through `settings.get`.
+result through `settings.get`, and its per-feature outcome through the `capabilities` block of
+the `Ready` payload (`docs/PROTOCOL.md` §4.1) so clients can grey out unavailable actions rather
+than failing at press time.
+
+**`input.key_sequence` is not a trait method.** The trait stays synchronous and dumb: no
+sequences, no delays, no timers. The `dispatch` module walks the steps itself, calling
+`key_combo` on `spawn_blocking` and `tokio::time::sleep` for `delay_ms` steps. That keeps the
+platform surface as small as possible — three backends implement four methods, not five — and
+delays belong in async code, not blocked on a worker thread.
 
 A `MockBackend` recording calls into a `Vec` lives behind `#[cfg(test)]` so every engine test
 runs without touching the real OS.
@@ -132,7 +140,7 @@ Create a virtual device via `/dev/uinput`.
 | `session` | handshake state machine, challenge/response, role assignment, 10 s auth timeout |
 | `registry` | paired devices: pubkeys, names, last-seen. Persisted as JSON. |
 | `pairing` | pairing window, OTP generation, QR payload construction |
-| `identity` | host Ed25519 keypair + TLS cert: generate on first run, load thereafter |
+| `identity` | host Ed25519 keypair, TLS cert, and `admin.token`: generate on first run, load thereafter |
 | `store` | profiles and actions, persisted; atomic write (temp file + rename) |
 | `dispatch` | op → handler routing, capability check, payload validation |
 | `discovery` | mDNS advertise / de-advertise on shutdown |
@@ -143,7 +151,7 @@ Broadcast to subscribers uses `tokio::sync::broadcast`; each socket task holds a
 
 ## 6. Config directory
 
-Via the `directories` crate, qualifier `in.redoimagined`, application `MuxDeck`:
+Via the `directories` crate: `ProjectDirs::from("in", "redoimagined", "MuxDeck")`.
 
 | Platform | Path |
 | --- | --- |
@@ -151,9 +159,14 @@ Via the `directories` crate, qualifier `in.redoimagined`, application `MuxDeck`:
 | macOS | `~/Library/Application Support/in.redoimagined.MuxDeck/` |
 | Linux | `~/.config/muxdeck/` |
 
+**These paths are an assumption, not a verified fact.** During M2, print the resolved
+`config_dir()` on each platform and correct this table to match what the crate actually emits.
+Do not trust what is written here over what the crate returns.
+
 ```
 identity.key       host Ed25519 private key   (0600)
 tls.pem / tls.key  self-signed certificate    (0600)
+admin.token        32 random bytes, base64    (0600)
 devices.json       paired device registry
 profiles.json      layouts
 actions.json       named shell actions
@@ -161,8 +174,12 @@ settings.json      engine settings
 logs/muxdeckd.log  rolling, 7 days
 ```
 
-All secret files are written with mode `0600` on Unix and a restrictive DACL on Windows. On
-first run, generate everything and log the fingerprint at INFO so the user can verify it.
+All secret files are written with mode `0600` on Unix and a current-user-only DACL on Windows.
+`admin.token` is a secret file: its file permissions are the entire boundary between "the user
+who owns this desktop session" and "any other local user", per `docs/ARCHITECTURE.md` §5.4.
+
+On first run, generate everything and log the fingerprint at INFO so the user can verify it.
+Never log `admin.token` or any key material.
 
 ## 7. CLI
 
@@ -174,6 +191,7 @@ muxdeckd [OPTIONS]
   --foreground               log to stdout instead of the log file
   --print-fingerprint        print the TLS cert fingerprint and exit
   --reset-identity           regenerate host key + cert (unpairs all devices), requires --yes
+  --yes                      confirm a destructive operation without prompting
 ```
 
 Subcommands for the installer, invoked by the control panel:
@@ -183,6 +201,18 @@ muxdeckd service install     register auto-start for the current user
 muxdeckd service uninstall
 muxdeckd service status
 ```
+
+Pairing subcommands, so a device can be paired before the desktop panel exists:
+
+```
+muxdeckd pair begin [--ttl <SECONDS>]    open a pairing window, print the code and QR payload
+muxdeckd pair list                       list paired devices
+muxdeckd pair revoke <DEVICE_ID>
+```
+
+These are not a second control path into the engine: they read `admin.token` from the config
+directory and connect over loopback as an ordinary admin WebSocket client, exactly like the
+panel. `--ttl` obeys the `30..=300` clamp from `docs/PROTOCOL.md` §4.2.
 
 - Windows: a Scheduled Task at logon (no admin required), not a Windows Service — a Service
   runs in session 0 and **cannot inject input into the user's desktop**. This is a real trap.
@@ -194,8 +224,11 @@ muxdeckd service status
 - `muxdeck-core`: round-trip every file in `protocol/fixtures/` — deserialise, serialise,
   compare semantically. Reject unknown `v`. Reject unknown ops.
 - `session`: full handshake happy path; wrong signature; unknown device; timeout; op sent
-  before auth; `admin` requested from a non-loopback address.
-- `pairing`: correct OTP; wrong OTP; expired window; pairing op outside the window.
+  before auth; `session.hello` carrying both `device_id` and `admin_token`, and neither; a valid
+  `admin_token` from a non-loopback address (must not grant `admin`); a loopback connection with
+  a wrong or absent token (must not grant `admin`).
+- `pairing`: correct OTP; wrong OTP; invalid proof-of-possession; expired window; `ttl_seconds`
+  out of the `30..=300` range; pairing op outside the window.
 - `dispatch`: every op × every role, asserting the capability matrix in
   `docs/ARCHITECTURE.md` §5.4.
 - `input`: against `MockBackend`, asserting modifier press/release ordering and that a combo

@@ -127,6 +127,20 @@ lib/
 **`Transport` is an interface even though there is one implementation.** It costs almost nothing
 now and it is the seam where USB or BLE would be added if that decision is ever revisited.
 
+### Icons
+
+A button's `icon` field is a string, and Flutter **tree-shakes icons** — a runtime
+`String → IconData` lookup silently renders blanks in release builds while working perfectly in
+debug. Do not work around this with `--no-tree-shake-icons`; it bloats every build to fix one
+lookup.
+
+Instead, a curated map of roughly 200 deck-appropriate Material icons lives in the shared
+protocol package as `packages/muxdeck_protocol/lib/src/icon_map.dart` — a
+`const Map<String, IconData>`. Because the constant references each `IconData` directly, the
+tree-shaker keeps exactly those glyphs. The client renders from this map and the desktop icon
+picker offers from the same map, so the two cannot disagree about what a name means or which
+names exist. Unknown names fall back to a filled dot.
+
 ## 6. Screens
 
 ### Connect
@@ -154,7 +168,13 @@ The main screen. Landscape-first, but must work in portrait on phones.
 - Page indicator + horizontal swipe when a profile has multiple pages.
 - Fire the action on **pointer down**, not on tap-up. This is a real perceptual difference and
   it is what makes it feel like hardware.
-- Trigger the button's configured haptic on pointer down, before the network send.
+- **Exception: buttons that have an `on_long_press` action fire on tap-up**, with long-press
+  detection at 500 ms. A button cannot both fire instantly and wait to find out whether the press
+  was long. Buttons with `on_long_press == null` — which should be most of them — keep the
+  fire-on-down behaviour. The layout editor warns about this when a long-press action is assigned
+  (`docs/SERVER.md` §6).
+- Trigger the button's configured haptic on pointer down, before the network send — on both
+  paths, since the haptic is feedback that the touch registered, not that the action fired.
 - Show optimistic pressed-state immediately; if the engine returns an error, flash the button
   red and toast the message.
 - Persistent, unobtrusive status chip: connection state + RTT in ms.
@@ -171,7 +191,15 @@ Device name, current host, RTT display toggle, unpair, keep-screen-awake toggle
 - On reconnect, re-run the full handshake. Never cache a session.
 - Cache the last known profile in `shared_preferences` and render it immediately at launch,
   greyed out, while connecting. The deck appearing instantly matters more than it being live.
-- Send `ping` every 5 s while connected; three consecutive missed pongs force a reconnect.
+- Send `system.ping` every 5 s while connected; three consecutive missed responses to
+  `system.ping` force a reconnect. There is no `pong` op — the `res` is the pong.
+- **Presses that cannot be sent are dropped, never queued.** Replaying a `CONTROL+W` five seconds
+  after the user pressed it is worse than losing it. On send failure: drop the press, flash the
+  button red, no retry.
+- Grey out buttons whose action needs a capability the host does not have, using the
+  `capabilities` block of the `Ready` payload (`docs/PROTOCOL.md` §4.1) — a Linux host reports
+  `text_unicode: false`, so `input.text` buttons are visibly unavailable rather than failing at
+  press time.
 
 ## 8. Testing
 

@@ -168,17 +168,24 @@ No input injection yet. This is the security backbone.
 
 > Implement milestone M2. Read docs/ENGINE.md and docs/ARCHITECTURE.md §5 first.
 >
-> In muxdeck-engine, build: identity (Ed25519 host key + rcgen self-signed cert, generated on
-> first run into the config dir from docs/ENGINE.md §6 with 0600 permissions), the axum + rustls
-> WebSocket server on /ws, the session handshake state machine from docs/PROTOCOL.md §3 with the
-> 10-second auth timeout, the pairing module with OTP and 120-second window, the device registry
-> persisted as JSON, and role assignment where `admin` is granted only to loopback connections.
+> In muxdeck-engine, build: identity (Ed25519 host key + rcgen self-signed cert + `admin.token`,
+> generated on first run into the config dir from docs/ENGINE.md §6 with 0600 permissions), the
+> axum + rustls WebSocket server on /ws, both session handshake paths from docs/PROTOCOL.md §3
+> with the 10-second auth timeout, the pairing module with OTP, proof-of-possession check and the
+> 30..=300 second window, the device registry persisted as JSON, and role assignment where
+> `admin` requires loopback **and** a matching admin token.
 >
 > In muxdeckd, wire up clap for the CLI in docs/ENGINE.md §7 (service subcommands can be stubs
-> that return "not implemented" for now), tracing setup, and config dir resolution.
+> that return "not implemented" for now), tracing setup, and config dir resolution. The
+> `muxdeckd pair begin/list/revoke` subcommands are **in scope for this milestone, not stubs** —
+> M4 needs them to pair a phone before the desktop panel exists. They connect over loopback with
+> the admin token like any other admin client.
+>
+> While you are there, print the resolved config directory on this machine and correct the
+> docs/ENGINE.md §6 table if it does not match what the `directories` crate actually emits.
 >
 > Tests as specified in docs/ENGINE.md §8 for session and pairing, plus an integration test that
-> binds port 0 and runs pair → auth → ping over a real WebSocket connection.
+> binds port 0 and runs pair → auth → system.ping over a real WebSocket connection.
 >
 > Then write a small `examples/probe.rs` I can run to pair a fake device and send a ping, so I
 > can exercise this from the terminal before any UI exists.
@@ -233,8 +240,8 @@ The first end-to-end moment. This is the milestone that proves the whole design.
 >
 > Add the fake in-process engine and the widget tests from docs/CLIENT.md §8.
 
-To pair before the desktop panel exists, run `muxdeckd` and use the pairing code it prints to
-stdout when you trigger pairing mode via `examples/probe.rs`.
+To pair before the desktop panel exists, run `muxdeckd pair begin` — it prints the 6-digit code
+and the QR payload for the phone to scan or for manual entry.
 
 ---
 

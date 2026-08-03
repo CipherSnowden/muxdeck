@@ -94,23 +94,48 @@ On first run the engine generates and stores, in the OS config directory:
 
 - an **Ed25519 host identity keypair**
 - a **self-signed TLS certificate** for the host, valid 10 years
+- a **local admin token** (see §5.4)
 
 Each client device generates its own **Ed25519 device keypair** on first launch. Private keys
 never leave the device that generated them.
+
+The host is identified by two strings, both derived from the host public key and both with
+exactly one representation everywhere they appear:
+
+```
+host_id     = "h_" + first 16 hex chars of SHA-256(host_public_key_bytes)
+fingerprint = lowercase hex, no separators, SHA-256 over the leaf certificate DER (64 chars)
+```
+
+Device IDs follow the same rule: `device_id = "d_" + first 16 hex chars of
+SHA-256(device_public_key_bytes)`.
+
+The certificate carries SANs for `localhost`, `127.0.0.1`, `::1`, and every non-loopback local IP
+present when it is generated; it is regenerated if the host's addresses change.
+
+> **Clients authenticate the host by certificate fingerprint pinning only.** Hostname and CA
+> validation are deliberately bypassed, because the host has no DNS name and no CA. The SANs
+> exist for tooling convenience, not for trust. Do not "fix" this by enabling hostname
+> validation — it will break every installation.
 
 ### 5.2 Pairing (once per device)
 
 1. In the desktop control panel the user clicks **Add device**. The engine enters pairing mode
    for 120 seconds and generates a random 6-digit one-time code.
 2. The panel displays a QR code encoding:
-   `muxdeck://pair?addr=192.168.1.42:47654&host=<host_id>&fp=<sha256_of_cert>&code=<otp>`
+   `muxdeck://pair?addr=192.168.1.42:47654&host=<host_id>&fp=<fingerprint>&code=<otp>`
+   where `host` and `fp` are exactly the strings defined in §5.1.
 3. The client scans it (or the user types `addr` + `code` manually).
 4. The client opens a TLS connection and **verifies the presented certificate's SHA-256
-   fingerprint equals `fp` from the QR**. Mismatch aborts. This is trust-on-first-use, but the
-   fingerprint arrives out of band via the QR, so it is not blind TOFU.
-5. The client sends `pair.request` with its device public key, device name, and the OTP.
-6. The engine verifies the OTP, stores the device public key in its registry, and returns a
-   device ID. Pairing mode closes.
+   fingerprint equals `fp` from the QR** (lowercase hex, §5.1). Mismatch aborts. This is
+   trust-on-first-use, but the fingerprint arrives out of band via the QR, so it is not blind
+   TOFU.
+5. The client sends `pair.request` with its device public key, device name, the OTP, and a
+   **proof of possession** — an Ed25519 signature by the device private key over
+   `b"muxdeck-pair-v1" || otp || device_pubkey`. Without it, anyone who read the QR could
+   register a public key they do not hold the private half of.
+6. The engine verifies the OTP and the proof, stores the device public key in its registry, and
+   returns a device ID. Pairing mode closes.
 
 ### 5.3 Session authentication (every connect)
 
@@ -118,26 +143,91 @@ No shared secret is ever transmitted after pairing.
 
 1. Client connects, verifies the pinned certificate fingerprint stored at pairing time.
 2. Client sends `session.hello` with its device ID.
-3. Engine replies `session.challenge` with a 32-byte random nonce.
-4. Client signs the nonce with its device private key and sends `session.auth`.
-5. Engine verifies the signature against the stored public key and replies `session.ready`.
+3. Engine responds with a `Challenge` payload carrying a 32-byte random nonce.
+4. Client signs `b"muxdeck-session-v1" || nonce || device_id || host_id` with its device private
+   key and sends `session.auth`. The domain prefix and the `host_id` stop a signature captured
+   against one host being replayed at another.
+5. Engine verifies the signature against the stored public key and responds with a `Ready`
+   payload.
+
+There are only two session ops, `session.hello` and `session.auth`; `Challenge` and `Ready` are
+payload shapes on their responses, not ops of their own. Responses echo the op of the request
+they answer — see `docs/PROTOCOL.md` §2.
+
+This is the `deck` path. The local control panel authenticates differently — see §5.4.
 
 Unauthenticated sockets may send only `session.*` and `pair.*` ops. Anything else closes the
 connection. A socket that has not authenticated within 10 seconds is closed.
 
 ### 5.4 Roles and capability gating
 
-| Role | Granted to | May do |
-| --- | --- | --- |
-| `deck` | paired mobile devices | `input.*`, `profile.get`, `profile.subscribe`, `ping` |
-| `admin` | connections from loopback only | everything, incl. `profile.set`, `pair.*`, `settings.*` |
+Two roles: `deck` for paired devices, `admin` for the local control panel.
 
-`admin` is granted **only** to connections originating from `127.0.0.1`/`::1`. A remote device
-cannot request it.
+#### How `admin` is obtained
+
+`admin` cannot be requested. The engine grants it if and only if **the peer address is loopback
+(`127.0.0.1`/`::1`) AND the connection presents the local admin token**.
+
+On first run the engine writes `admin.token` into the config directory: 32 random bytes, base64,
+file mode `0600` on Unix and a current-user-only DACL on Windows. A loopback client sends it in
+`session.hello` instead of a `device_id`, and receives a `Ready` payload directly — there is no
+challenge round trip and no `session.auth`. The 10-second unauthenticated-socket timeout still
+applies.
+
+`session.hello` therefore carries either `device_id` (deck, leads to a challenge) or
+`admin_token` (panel, immediately ready). Exactly one; both or neither is `BAD_REQUEST`.
+
+**This is an intentional design decision, not an oversight — do not "harden" it into a challenge
+handshake, which would break the panel.** The panel cannot pair itself, because opening a pairing
+window is itself an admin operation; a token file is what breaks that chicken-and-egg. Loopback
+alone would be insufficient: on a multi-user desktop a second logged-in user can also reach
+`127.0.0.1`. Reading `admin.token` requires being the same OS user, which is the actual trust
+boundary.
+
+#### Capability matrix
+
+Every op in `docs/PROTOCOL.md` §4 appears here exactly once. `docs/ENGINE.md` §8 tests against
+this table, so it must stay exhaustive.
+
+| Op | pre-auth | `deck` | `admin` |
+| --- | :---: | :---: | :---: |
+| `session.hello` | ✅ | — | — |
+| `session.auth` | ✅ | — | — |
+| `pair.request` | ✅ (pairing window only) | — | — |
+| `pair.begin` | ❌ | ❌ | ✅ |
+| `pair.cancel` | ❌ | ❌ | ✅ |
+| `pair.list_devices` | ❌ | ❌ | ✅ |
+| `pair.revoke` | ❌ | ❌ | ✅ |
+| `system.ping` | ❌ | ✅ | ✅ |
+| `input.key_combo` | ❌ | ✅ | ✅ |
+| `input.key_sequence` | ❌ | ✅ | ✅ |
+| `input.text` | ❌ | ✅ | ✅ |
+| `input.media` | ❌ | ✅ | ✅ |
+| `input.mouse` | ❌ | ✅ | ✅ |
+| `action.run` | ❌ | ✅ | ✅ |
+| `action.list` | ❌ | ✅ | ✅ |
+| `action.set` | ❌ | ❌ | ✅ |
+| `action.delete` | ❌ | ❌ | ✅ |
+| `profile.get` | ❌ | ✅ | ✅ |
+| `profile.list` | ❌ | ✅ | ✅ |
+| `profile.subscribe` | ❌ | ✅ | ✅ |
+| `profile.activate` | ❌ | ✅ | ✅ |
+| `profile.set` | ❌ | ❌ | ✅ |
+| `profile.delete` | ❌ | ❌ | ✅ |
+| `telemetry.subscribe` | ❌ | ✅ | ✅ |
+| `settings.get` | ❌ | ❌ | ✅ |
+| `settings.set` | ❌ | ❌ | ✅ |
+
+Events by role: `profile.changed`, `telemetry.update` and `engine.shutdown` go to any subscribed
+socket. `device.changed` and `pairing.state` go to `admin` sockets only.
+
+`profile.activate` is deck-callable on purpose: a device that can already inject arbitrary
+keystrokes is not escalating by choosing which grid it displays, and "switch to my streaming
+profile" is a table-stakes deck button that must work without the panel running.
 
 ### 5.5 Shell execution
 
-`action.exec` (arbitrary shell commands) is **disabled by default** and can only be enabled
+`action.run` (execution of user-defined shell commands) is **disabled by default** and can only be enabled
 from the control panel, with an explicit warning. When enabled, commands must match an
 allow-list of user-defined named actions — the client sends an action *name*, never a raw
 command string. This is the single largest footgun in a project like this and is deliberately
@@ -149,10 +239,16 @@ The engine advertises `_muxdeck._tcp.local.` with TXT records:
 
 | Key | Meaning |
 | --- | --- |
-| `v` | protocol major version, e.g. `1` |
-| `id` | host ID (hex, first 16 bytes of host public key) |
+| `v` | comma-separated list of supported protocol majors, e.g. `1` or `1,2` |
+| `id` | host ID — the full `h_…` string from §5.1, e.g. `h_a91c4d2e8f019b37` |
 | `name` | friendly host name, e.g. `ENIGMA-ENTROPY` |
-| `fp` | SHA-256 fingerprint of the TLS certificate |
+| `fp` | TLS certificate fingerprint, lowercase hex per §5.1 |
+
+`v` is a list, not a single value, because a single value cannot express "this host speaks both
+majors" during a transition release. Clients pick the highest major they also support.
+
+`id` carries the same string the protocol uses, so a client matches a stored host to a discovery
+result by plain string equality — there is no second representation to normalise.
 
 Clients browse for this service to populate the "hosts found" list. Because `fp` is in the TXT
 record, a previously-paired client can confirm it is talking to the same host even if the IP
@@ -169,7 +265,7 @@ changed. Manual `host:port` entry must always remain available as a fallback.
 | OS input injection | 1–3 ms |
 | **total, press to keystroke** | **< 25 ms** |
 
-The client measures true RTT with `ping`/`pong` and displays it. Any regression above budget
+The client measures true RTT with `system.ping` and its response, and displays it. Any regression above budget
 is a bug, not a tuning opportunity.
 
 JSON is used on the wire deliberately: at a few messages per second it costs nothing measurable
