@@ -1,0 +1,9 @@
+target/
+build/
+.dart_tool/
+.fvm/
+.packages
+*.iml
+.idea/
+.DS_Store
+Thumbs.db
