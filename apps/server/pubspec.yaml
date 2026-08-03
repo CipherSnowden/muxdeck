@@ -44,6 +44,8 @@ dependencies:
   path: ^1.9.1
   muxdeck_protocol:
     path: ../../packages/muxdeck_protocol
+  muxdeck_icons:
+    path: ../../packages/muxdeck_icons
 
 dev_dependencies:
   flutter_test:

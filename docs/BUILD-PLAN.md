@@ -523,7 +523,7 @@ failure.
 
 ---
 
-## [ ] M6 — Profiles and the live layout editor
+## [x] M6 — Profiles and the live layout editor
 
 > Implement milestone M6. Read docs/SERVER.md §6 (Layout editor) and docs/PROTOCOL.md §4.5 and §6.
 >
@@ -540,6 +540,43 @@ failure.
 >
 > The live loop matters: editing on the desktop must update the tablet immediately. Verify that
 > end to end before considering this done.
+
+**Done, core loop verified.** Outcome notes:
+
+- **Event routing had to be rebuilt first, and this was the real blocker.** Events were gated on
+  `role == Admin`, so a deck received nothing — the live loop was impossible — and there was no
+  per-socket subscription state at all. Replaced with an `EventAudience` enum transcribing
+  `docs/PROTOCOL.md` §4.9 directly, plus subscription flags on `Session`. Six tests assert every
+  row, including the two negatives that matter: a deck must not see `device.changed`, and an
+  unsubscribed socket must not see `profile.changed`.
+- **The live loop is proven without a phone.** `an_edit_reaches_a_subscribed_deck` runs a real
+  TLS server, authenticates a deck, subscribes it, edits from an admin socket, and asserts the
+  deck receives the edited profile. Its siblings assert the negatives.
+- **And proven through the UI.** Ran the panel against a live engine: the editor rendered all 15
+  default buttons from the engine, a button was edited in the dialog, and the engine persisted
+  `label='CopyDuplicate' color=#1F8A70 keys=CONTROL+C`. The panel then re-rendered from the
+  engine's echoed `profile.changed` rather than from local state — `EditorController` never sets
+  state itself, so what is on screen is always what is stored.
+- 106 engine tests, 42 client, 16 panel, 6 icons. `cargo fmt`/`clippy -D warnings` and every
+  `dart format`/`analyze` clean.
+
+- **`packages/muxdeck_icons` now exists**, holding a `const Map<String, IconData>` of ~170 icons.
+  Const and directly referenced on purpose: Flutter tree-shakes icons, so a runtime lookup into
+  the full Material set renders **blank squares in release builds while working perfectly in
+  debug**. A test asserts every icon the engine's default profile names actually resolves, so
+  renaming one there without the other fails the build rather than shipping blank buttons.
+- Key capture maps `LogicalKeyboardKey` to canonical names in one tested table — the part
+  `docs/SERVER.md` §9 flags as *"layout-dependent bugs live here"*. It also orders combos so
+  modifiers precede their key: `input.key_combo` presses in listed order, so `["C","CONTROL"]`
+  would tap C before Control is held and the shortcut would silently never fire.
+
+Deferred to a second pass, as planned: drag-to-move between cells, multiple profiles with
+activation from the editor, and multiple pages with swipe. The protocol and store support all
+three already — only the editor UI is missing.
+
+Still needing the phone, alongside M4's discovery check: that the **tablet visibly re-renders**
+when an edit lands. The mechanism is proven at both the protocol and panel layers; only that
+last leg is untested.
 
 ---
 

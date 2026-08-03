@@ -8,8 +8,15 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:muxdeck_protocol/muxdeck_protocol.dart';
+
 import 'domain/admin_session.dart';
+import 'domain/editor_controller.dart';
 
 final adminSessionProvider = NotifierProvider<AdminSession, AdminState>(
   AdminSession.new,
+);
+
+final editorProvider = NotifierProvider<EditorController, Profile?>(
+  EditorController.new,
 );
