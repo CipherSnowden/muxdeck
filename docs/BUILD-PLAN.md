@@ -432,6 +432,13 @@ trip per attempt.
   install failed with "Cannot remove from an unmodifiable list". Fixed at the source so every
   caller benefits.
 
+- **The iOS build broke once, and the cause was an added `ios/Podfile`.** Every plugin here ships
+  as a Swift Package, so Flutter uses SPM and CocoaPods is not involved; a Podfile forced
+  CocoaPods integration into a project with none and the sandbox went out of sync with
+  `Podfile.lock`. Removed. The deployment target it was meant to enforce is already set in the
+  Xcode project, which is what SPM reads. `docs/CLIENT.md` §4 now says so, because the reflex to
+  add one is natural and wrong.
+
 Still to do, and it needs hardware: run through the seven-step checklist in the plan on a
 physical Android device. Discovery is the only step that cannot be verified any other way.
 

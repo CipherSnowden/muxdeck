@@ -117,10 +117,25 @@ Two more details worth knowing before debugging this:
 Taken from the dependencies' own gradle files and podspecs, not guessed. Raising these is not
 optional — the build fails, or worse, succeeds and misbehaves.
 
-| Platform | Floor | Imposed by |
-| --- | --- | --- |
-| Android | `minSdk 23` | `flutter_secure_storage` 10.x, `mobile_scanner` 7.x |
-| iOS | deployment target `13.0` | `bonsoir_darwin` (the highest of the three; `mobile_scanner` and `flutter_secure_storage_darwin` want 12.0) |
+| Platform | Floor | Imposed by | Set in |
+| --- | --- | --- | --- |
+| Android | `minSdk 23` | `flutter_secure_storage` 10.x, `mobile_scanner` 7.x | `android/app/build.gradle.kts` |
+| iOS | deployment target `13.0` | `bonsoir_darwin` (the highest of the three; `mobile_scanner` and `flutter_secure_storage_darwin` want 12.0) | `IPHONEOS_DEPLOYMENT_TARGET` in `Runner.xcodeproj` |
+
+**There is no `ios/Podfile`, and adding one breaks the build.** Every plugin this client depends
+on ships as a Swift Package, so Flutter resolves them through Swift Package Manager and CocoaPods
+is not involved at all. Introducing a Podfile forces CocoaPods integration into a project that
+has none, and the build then fails with:
+
+```
+All plugins found for ios are Swift Packages, but your project still has CocoaPods integration.
+Error (Xcode): The sandbox is not in sync with the Podfile.lock.
+```
+
+The iOS deployment target is enforced by `IPHONEOS_DEPLOYMENT_TARGET` in the Xcode project, which
+is what SPM reads — a Podfile `platform :ios` line would be a second place to state the same
+thing, and the wrong one. If a future dependency is CocoaPods-only, migrating is a deliberate
+decision to take then, not something to pre-empt with a Podfile now.
 
 ### iOS — `ios/Runner/Info.plist`
 
