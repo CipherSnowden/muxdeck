@@ -1,0 +1,7 @@
+{
+  "_comment": "Raw byte layout signed by pair.request proof. docs/PROTOCOL.md 4.2.",
+  "code": "402913",
+  "device_pubkey_hex": "3c9e1a7b58d0f26439ac8e571b04d3f68a2c95e0417bd8630fe29a4c7d15b8e2",
+  "message_hex": "6d75786465636b2d706169722d76313430323931333c9e1a7b58d0f26439ac8e571b04d3f68a2c95e0417bd8630fe29a4c7d15b8e2",
+  "message_len": 53
+}

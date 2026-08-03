@@ -1,0 +1,2 @@
+{ "v": 1, "t": "evt", "op": "telemetry.update",
+  "d": { "ts": 1785312000, "cpu_pct": 14.5, "ram_pct": 58.2 } }

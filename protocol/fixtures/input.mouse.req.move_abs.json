@@ -1,0 +1,2 @@
+{ "v": 1, "t": "req", "id": "01J8Z9K3N6", "op": "input.mouse",
+  "d": { "action": "move_abs", "x": 0.5, "y": 0.25 } }

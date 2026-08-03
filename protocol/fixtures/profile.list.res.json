@@ -1,0 +1,3 @@
+{ "v": 1, "t": "res", "id": "01J8Z9K3Q2", "op": "profile.list",
+  "d": { "profiles": [ { "id": "p_default", "name": "Default", "active": true },
+                       { "id": "p_stream", "name": "Streaming", "active": false } ] } }

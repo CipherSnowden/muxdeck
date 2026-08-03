@@ -1,0 +1,4 @@
+{ "v": 1, "t": "req", "id": "01J8Z9K3N2", "op": "input.key_sequence",
+  "d": { "steps": [ { "keys": ["CONTROL", "C"] },
+                    { "delay_ms": 50 },
+                    { "keys": ["CONTROL", "V"] } ] } }

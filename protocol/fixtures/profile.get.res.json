@@ -1,0 +1,7 @@
+{ "v": 1, "t": "res", "id": "01J8Z9K3Q1", "op": "profile.get",
+  "d": { "profile": { "id": "p_default", "name": "Default", "grid": { "cols": 5, "rows": 3 },
+      "pages": [ { "id": "pg_1", "name": "Main", "buttons": [
+        { "id": "b_1", "pos": { "col": 0, "row": 0 }, "label": "Copy",
+          "icon": "content_copy", "color": "#2D6CDF", "haptic": "light",
+          "on_tap": { "op": "input.key_combo", "d": { "keys": ["CONTROL", "C"] } },
+          "on_long_press": null } ] } ] } } }

@@ -1,0 +1,5 @@
+{ "v": 1, "t": "res", "id": "01J8Z9K3M3", "op": "session.auth",
+  "d": { "role": "deck", "protocol": 1, "engine_version": "0.1.0",
+         "host_platform": "linux", "active_profile_id": "p_default",
+         "capabilities": { "text_unicode": false, "media_keys": true,
+                           "mouse": true, "shell_actions": false } } }

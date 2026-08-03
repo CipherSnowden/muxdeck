@@ -1,0 +1,5 @@
+{ "v": 1, "t": "res", "id": "01J8Z9K3M2", "op": "session.hello",
+  "d": { "mode": "ready", "role": "admin", "protocol": 1, "engine_version": "0.1.0",
+         "host_platform": "windows", "active_profile_id": "p_default",
+         "capabilities": { "text_unicode": true, "media_keys": true,
+                           "mouse": true, "shell_actions": false } } }

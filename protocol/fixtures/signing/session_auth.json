@@ -1,0 +1,8 @@
+{
+  "_comment": "Raw byte layout signed by session.auth. docs/PROTOCOL.md 4.1. Hex, not base64, so neither test suite needs a codec dependency to check it.",
+  "nonce_hex": "f6a434d5bdf1c47bad26c9f2b6ecdc23a1f0d8e5c4b3a291807f6e5d4c3b2a19",
+  "device_id": "d_7f3a91c2b4e05d18",
+  "host_id": "h_a91c4d2e8f019b37",
+  "message_hex": "6d75786465636b2d73657373696f6e2d7631f6a434d5bdf1c47bad26c9f2b6ecdc23a1f0d8e5c4b3a291807f6e5d4c3b2a19645f37663361393163326234653035643138685f61393163346432653866303139623337",
+  "message_len": 86
+}

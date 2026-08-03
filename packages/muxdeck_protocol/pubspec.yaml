@@ -1,14 +1,13 @@
 name: muxdeck_protocol
-description: A starting point for Dart libraries or applications.
-version: 1.0.0
-# repository: https://github.com/my_org/my_repo
+description: >-
+  MuxDeck wire protocol types, shared by the mobile deck and the desktop control
+  panel. An implementation of docs/PROTOCOL.md, which is the source of truth.
+version: 0.1.0
+repository: https://github.com/CipherSnowden/muxdeck
+publish_to: none
 
 environment:
   sdk: ^3.12.2
-
-# Add regular dependencies here.
-dependencies:
-  # path: ^1.9.0
 
 dev_dependencies:
   lints: ^6.0.0

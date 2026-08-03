@@ -55,6 +55,21 @@ no URL-safe variant. This applies to `nonce`, `signature`, `device_pubkey`, `pro
 `admin_token`. Note the deliberate contrast with fingerprints and IDs, which are hex because they
 travel in URLs and DNS TXT records; base64 is used only inside JSON bodies.
 
+Every one of these fields has a fixed decoded length, and the encoded length follows from it:
+
+| Field | Bytes | Base64 characters |
+| --- | :---: | :---: |
+| `nonce` | 32 | 44 |
+| `device_pubkey` | 32 | 44 — Ed25519 public key |
+| `admin_token` | 32 | 44 |
+| `signature` | 64 | 88 — Ed25519 signature |
+| `proof` | 64 | 88 — Ed25519 signature |
+
+The engine validates these lengths before attempting any cryptographic operation; a wrong length
+is `BAD_REQUEST`, not `BAD_SIGNATURE`, because it is a malformed message rather than a failed
+verification. The examples throughout this document use fake values of the correct length, so a
+fixture can exercise a length check.
+
 An `err` response carries:
 
 ```json
@@ -203,7 +218,7 @@ whether it arrived inside the union or on its own.
 
 **`session.auth`** — req. Valid only after a `Challenge`.
 ```json
-{ "signature": "Xr8kT2vB5nM9qL1cJ7hF4dS0aG6wY3zP8eU5iO2tK7Y=" }
+{ "signature": "Xr8kT2vB5nM9qL1cJ7hF4dS0aG6wY3zP8eU5iO2tK7YQm5wD8jH2nT6bV0xL9cF3sG7yZ1aU4eK8iP2oR5tN6Q==" }
 ```
 
 The signature is plain Ed25519 by the device private key over exactly these bytes, concatenated
@@ -265,7 +280,7 @@ socket. The other `pair.*` ops are admin only.
   "device_pubkey": "7mK3nQ9vR2xT5bJ8cH1sD4gF6wY0aZ3eU7iL5oP4tM0=",
   "device_name": "Cipher's iPad",
   "platform": "ios",
-  "proof": "B4hN7kR0vX2mQ5tJ8cF1sD6gW3yZ9aU4eL7iO2pK5T8="
+  "proof": "B4hN7kR0vX2mQ5tJ8cF1sD6gW3yZ9aU4eL7iO2pK5T8Hs3nV6bY0dK9mR2tX5wQ8jL1cG4fZ7uA0eN3iP6oS9Q=="
 }
 ```
 

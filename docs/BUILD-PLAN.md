@@ -181,9 +181,53 @@ they appear at M1 and M9 respectively.
 
 ---
 
-## [ ] M1 — Protocol types and fixtures
+## [x] M1 — Protocol types and fixtures
 
 The foundation everything else is checked against.
+
+**Done.** Outcome notes:
+
+- **66 envelope fixtures**, one per message shape, plus two byte-layout fixtures under
+  `protocol/fixtures/signing/`. Every op in the `docs/ARCHITECTURE.md` §5.4 matrix has both a
+  request and a response; all five events are covered; two `err` fixtures exercise the error
+  envelope. `input.mouse.req` has six variants and no bare file beside them, per §8.
+- **Both suites fail correctly.** Verified by mutation, not by assumption: adding an unknown
+  field to a fixture breaks round-trip equality in both languages, and renaming `host_name`
+  fails the parse in both. Each names the offending file.
+- The signing buffers are compared as **raw bytes** via hex fixtures, so neither suite needs a
+  base64 codec to check the one thing that fails silently at runtime.
+- Rust: 15 tests. Dart: 14 tests. `cargo fmt`/`clippy -D warnings` and
+  `dart format`/`dart analyze` all clean.
+
+Deviations from the spec, all recorded in `docs/PROTOCOL.md` in the same commit:
+
+- **`signature` and `proof` examples were the wrong length.** Both were 44-character base64
+  (32 bytes); an Ed25519 signature is 64 bytes, so the correct encoding is 88 characters. Left
+  as they were, M2 would have built a length check against an impossible value. §2 now carries
+  a table of every base64 field's fixed byte length, and states that a wrong length is
+  `BAD_REQUEST` rather than `BAD_SIGNATURE` — it is a malformed message, not a failed
+  verification.
+- `hold_ms` and `delay_ms` are **optional** rather than defaulted to zero on both sides. A
+  `key_sequence` step that omits `hold_ms` must not gain one on the way back out, and a
+  defaulted field would break exact round-tripping.
+
+### Open question for M4 — `icon_map.dart` cannot live where the spec puts it
+
+`docs/CLIENT.md` §5 places the curated icon map at
+`packages/muxdeck_protocol/lib/src/icon_map.dart` as a `const Map<String, IconData>`.
+`IconData` comes from `package:flutter`, but `muxdeck_protocol` is a **plain Dart package** —
+which is exactly what lets `protocol.yml` run it with the Dart SDK alone, in seconds, without a
+Flutter install. Adding a Flutter dependency would make `dart test` unusable there.
+
+Three ways out, to decide before M4 builds the deck grid:
+
+1. **A second package**, `packages/muxdeck_icons`, depending on Flutter and on
+   `muxdeck_protocol`. Keeps the protocol pure and the fast CI job fast. Recommended.
+2. Make `muxdeck_protocol` a Flutter package. Simplest to write, but the protocol tests then
+   need a Flutter toolchain and the shared package stops being usable by anything non-Flutter.
+3. Keep only the icon *names* in the protocol package and the `IconData` map in the client.
+   The desktop editor then needs its own copy, and the two can disagree about which names
+   exist — which is the specific failure §5 exists to prevent.
 
 > Implement milestone M1 from docs/BUILD-PLAN.md. docs/PROTOCOL.md is the source of truth —
 > follow it exactly and do not invent fields or ops.

@@ -1,0 +1,4 @@
+{ "v": 1, "t": "res", "id": "01J8Z9K3M7", "op": "pair.list_devices",
+  "d": { "devices": [
+    { "device_id": "d_7f3a91c2b4e05d18", "name": "Cipher's iPad", "platform": "ios",
+      "paired_at": 1785300000, "last_seen": 1785311900, "connected": true } ] } }

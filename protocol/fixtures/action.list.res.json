@@ -1,0 +1,4 @@
+{ "v": 1, "t": "res", "id": "01J8Z9K3P2", "op": "action.list",
+  "d": { "actions": [
+    { "id": "a_obs_scene_gaming", "name": "OBS: Gaming scene",
+      "command": "obs-cli", "args": ["scene", "switch", "--name", "Gaming"], "cwd": null } ] } }

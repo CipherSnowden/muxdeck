@@ -1,0 +1,5 @@
+{ "v": 1, "t": "req", "id": "01J8Z9K3M4", "op": "pair.request",
+  "d": { "code": "402913",
+         "device_pubkey": "7mK3nQ9vR2xT5bJ8cH1sD4gF6wY0aZ3eU7iL5oP4tM0=",
+         "device_name": "Cipher's iPad", "platform": "ios",
+         "proof": "B4hN7kR0vX2mQ5tJ8cF1sD6gW3yZ9aU4eL7iO2pK5T8Hs3nV6bY0dK9mR2tX5wQ8jL1cG4fZ7uA0eN3iP6oS9Q==" } }

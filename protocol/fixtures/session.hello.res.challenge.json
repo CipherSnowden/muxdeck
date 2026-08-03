@@ -1,0 +1,4 @@
+{ "v": 1, "t": "res", "id": "01J8Z9K3M2", "op": "session.hello",
+  "d": { "mode": "challenge",
+         "nonce": "9pQ0Vv3xR7tK2mN5bC8jH1sD4gF6wZ0aY3eU7iL5oP4=",
+         "host_id": "h_a91c4d2e8f019b37", "host_name": "ENIGMA-ENTROPY" } }

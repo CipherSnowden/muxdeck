@@ -1,0 +1,3 @@
+{ "v": 1, "t": "req", "id": "01J8Z9K3M2", "op": "session.hello",
+  "d": { "admin_token": "a0Rk9vQ2xZ7pN4tJ1sB6wH3mD8fG5cV0yU2iA7eK4oM=",
+         "client_version": "0.1.0", "platform": "windows" } }

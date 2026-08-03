@@ -1,0 +1,2 @@
+{ "v": 1, "t": "evt", "op": "pairing.state",
+  "d": { "active": true, "expires_at": 1785312120 } }

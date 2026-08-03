@@ -1,0 +1,2 @@
+{ "v": 1, "t": "evt", "op": "engine.shutdown",
+  "d": { "reason": "user_requested" } }

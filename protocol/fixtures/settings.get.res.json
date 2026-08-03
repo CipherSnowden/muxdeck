@@ -1,0 +1,4 @@
+{ "v": 1, "t": "res", "id": "01J8Z9K3R1", "op": "settings.get",
+  "d": { "port": 47654, "host_name": "ENIGMA-ENTROPY",
+         "shell_actions_enabled": false, "telemetry_enabled": true,
+         "telemetry_interval_ms": 1000, "autostart": true } }
