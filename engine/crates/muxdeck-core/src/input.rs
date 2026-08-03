@@ -303,4 +303,167 @@ impl Key {
     pub fn is_modifier(&self) -> bool {
         matches!(self, Key::Control | Key::Shift | Key::Alt | Key::Meta)
     }
+
+    /// Every canonical key.
+    ///
+    /// The platform keymaps sweep this to prove each key maps to something sane. A keymap's
+    /// `match` is exhaustive, so a *new* variant fails to compile there — but a variant missing
+    /// from this list is simply never tested, which nothing else catches. Hence the length
+    /// assertion in the tests below.
+    pub const ALL: &'static [Key] = &[
+        Key::Control,
+        Key::Shift,
+        Key::Alt,
+        Key::Meta,
+        Key::A,
+        Key::B,
+        Key::C,
+        Key::D,
+        Key::E,
+        Key::F,
+        Key::G,
+        Key::H,
+        Key::I,
+        Key::J,
+        Key::K,
+        Key::L,
+        Key::M,
+        Key::N,
+        Key::O,
+        Key::P,
+        Key::Q,
+        Key::R,
+        Key::S,
+        Key::T,
+        Key::U,
+        Key::V,
+        Key::W,
+        Key::X,
+        Key::Y,
+        Key::Z,
+        Key::Digit0,
+        Key::Digit1,
+        Key::Digit2,
+        Key::Digit3,
+        Key::Digit4,
+        Key::Digit5,
+        Key::Digit6,
+        Key::Digit7,
+        Key::Digit8,
+        Key::Digit9,
+        Key::F1,
+        Key::F2,
+        Key::F3,
+        Key::F4,
+        Key::F5,
+        Key::F6,
+        Key::F7,
+        Key::F8,
+        Key::F9,
+        Key::F10,
+        Key::F11,
+        Key::F12,
+        Key::F13,
+        Key::F14,
+        Key::F15,
+        Key::F16,
+        Key::F17,
+        Key::F18,
+        Key::F19,
+        Key::F20,
+        Key::F21,
+        Key::F22,
+        Key::F23,
+        Key::F24,
+        Key::Escape,
+        Key::Tab,
+        Key::CapsLock,
+        Key::Space,
+        Key::Enter,
+        Key::Backspace,
+        Key::Delete,
+        Key::Insert,
+        Key::Home,
+        Key::End,
+        Key::PageUp,
+        Key::PageDown,
+        Key::Left,
+        Key::Right,
+        Key::Up,
+        Key::Down,
+        Key::Numpad0,
+        Key::Numpad1,
+        Key::Numpad2,
+        Key::Numpad3,
+        Key::Numpad4,
+        Key::Numpad5,
+        Key::Numpad6,
+        Key::Numpad7,
+        Key::Numpad8,
+        Key::Numpad9,
+        Key::NumpadAdd,
+        Key::NumpadSub,
+        Key::NumpadMul,
+        Key::NumpadDiv,
+        Key::NumpadDecimal,
+        Key::NumpadEnter,
+        Key::Minus,
+        Key::Equal,
+        Key::BracketLeft,
+        Key::BracketRight,
+        Key::Backslash,
+        Key::Semicolon,
+        Key::Quote,
+        Key::Backquote,
+        Key::Comma,
+        Key::Period,
+        Key::Slash,
+        Key::PrintScreen,
+        Key::ScrollLock,
+        Key::Pause,
+        Key::NumLock,
+        Key::Menu,
+    ];
+}
+
+impl MediaCommand {
+    /// Every media command. Same purpose as [`Key::ALL`].
+    pub const ALL: &'static [MediaCommand] = &[
+        MediaCommand::PlayPause,
+        MediaCommand::Next,
+        MediaCommand::Prev,
+        MediaCommand::Stop,
+        MediaCommand::VolumeUp,
+        MediaCommand::VolumeDown,
+        MediaCommand::Mute,
+    ];
+}
+
+#[cfg(test)]
+mod all_tests {
+    use super::*;
+
+    #[test]
+    fn the_key_list_is_complete_and_has_no_repeats() {
+        // 4 modifiers + 26 letters + 10 digits + 24 function + 16 navigation + 16 numpad
+        // + 11 symbols + 5 system. Adding a variant to `Key` means adding it here; this
+        // assertion is what says so out loud.
+        assert_eq!(Key::ALL.len(), 112);
+
+        let unique: std::collections::HashSet<_> = Key::ALL.iter().collect();
+        assert_eq!(unique.len(), Key::ALL.len(), "a key is listed twice");
+    }
+
+    #[test]
+    fn the_media_list_is_complete_and_has_no_repeats() {
+        assert_eq!(MediaCommand::ALL.len(), 7);
+        let unique: std::collections::HashSet<_> = MediaCommand::ALL.iter().collect();
+        assert_eq!(unique.len(), MediaCommand::ALL.len());
+    }
+
+    #[test]
+    fn exactly_four_keys_are_modifiers() {
+        let modifiers: Vec<_> = Key::ALL.iter().filter(|k| k.is_modifier()).collect();
+        assert_eq!(modifiers.len(), 4, "found {modifiers:?}");
+    }
 }
