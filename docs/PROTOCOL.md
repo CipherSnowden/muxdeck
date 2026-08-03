@@ -164,8 +164,8 @@ untagged would make an added or renamed field fail over to the wrong variant ins
   "host_id": "h_a91c4d2e8f019b37", "host_name": "ENIGMA-ENTROPY" }
 ```
 
-`mode: "ready"` — answer to the admin form. The `Ready` payload documented below, with `mode`
-added; `session.auth` is not sent on this path:
+`mode: "ready"` — answer to the admin form. The `Ready` payload documented below, carried as a
+variant of the union; `session.auth` is not sent on this path:
 ```json
 { "mode": "ready",
   "role": "admin", "protocol": 1, "engine_version": "0.1.0",
@@ -177,8 +177,29 @@ added; `session.auth` is not sent on this path:
 A `mode` the reader does not recognise is `BAD_REQUEST` on the engine side and a hard connection
 failure on the client side — not a field to skip past.
 
-**`mode` appears only on the `session.hello` response**, because that is the only place two
-shapes share one op. The `session.auth` response below is always `Ready` and carries no `mode`.
+**`mode` belongs to the union, not to `Ready`.** There is exactly one `Ready` payload type, used
+in two places. The tag is supplied by the enclosing union when `Ready` appears as a
+`session.hello` response, and is absent when `Ready` is the `session.auth` response directly.
+`Ready` itself has no `mode` field and never did.
+
+In Rust:
+
+```rust
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+enum HelloResponse {
+    Challenge(Challenge),
+    Ready(Ready),
+}
+```
+
+Serde inserts `"mode"` when serialising through the enum and omits it when serialising `Ready`
+on its own, so the same struct produces both wire forms with no duplicated type and no field to
+keep in sync.
+
+In Dart, `HelloResponse.fromJson` switches on `mode` and delegates to the matching
+`fromJson`. `Ready.fromJson` ignores `mode` and tolerates its presence, so it parses correctly
+whether it arrived inside the union or on its own.
 
 **`session.auth`** — req. Valid only after a `Challenge`.
 ```json
@@ -200,9 +221,8 @@ signature captured against one host from being replayed against another. The Rus
 must build a byte-identical buffer; a mismatch authenticates nothing and is miserable to
 diagnose, so this layout is fixture-tested on both sides.
 
-**`session.auth`** — res, `Ready` payload. No `mode` field: `session.auth` has exactly one
-response shape, so there is nothing to discriminate. The same `Ready` fields appear inside the
-`mode: "ready"` branch of the `session.hello` response above.
+**`session.auth`** — res, `Ready` payload — the same single type as the `mode: "ready"` branch
+above, serialised directly rather than through the union, so no `mode` field appears.
 ```json
 {
   "role": "deck",

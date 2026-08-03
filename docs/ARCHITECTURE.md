@@ -159,6 +159,10 @@ they answer, and the `session.hello` response is an internally-tagged union on `
 branch is read from the tag rather than inferred from which fields are present — see
 `docs/PROTOCOL.md` §2 and §4.1.
 
+`Ready` is one payload type appearing in two places. The `mode` tag comes from the union that
+encloses it in the `session.hello` response, and is absent when `Ready` is returned directly as
+the `session.auth` response. `Ready` has no `mode` field of its own.
+
 This is the `deck` path. The local control panel authenticates differently — see §5.4.
 
 Unauthenticated sockets may send only `session.*` and `pair.*` ops. Anything else closes the

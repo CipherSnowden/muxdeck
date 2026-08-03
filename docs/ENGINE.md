@@ -29,6 +29,31 @@ Dependency direction is strictly downward: `muxdeckd` → `muxdeck-engine` → {
 Keeping `muxdeck-core` I/O-free means the protocol types are trivially testable and could be
 published or reused later without pulling in tokio.
 
+### 2.1 Internally-tagged unions in `muxdeck-core`
+
+`docs/PROTOCOL.md` §4.1 defines the `session.hello` response as internally tagged on `mode`:
+
+```rust
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum HelloResponse {
+    Challenge(Challenge),
+    Ready(Ready),
+}
+```
+
+**The variants must stay newtype-wrapped around named structs.** Serde's internal tagging works
+on newtype and struct variants only — and `Ready` has to remain a standalone struct regardless,
+because `session.auth` returns it directly, without a tag. Inlining the fields into the enum
+(`Ready { role: Role, ... }`) would duplicate the type, and switching to tuple variants or
+`#[serde(untagged)]` fails outright: untagged silently selects the wrong variant when a field is
+added or renamed, which is the exact failure mode the tag exists to prevent.
+
+The tag is supplied by the enum on the way out and consumed by it on the way in. `Ready` itself
+never carries a `mode` field, so serialising it on its own produces the untagged form the
+`session.auth` response requires. Both forms are fixture-tested (`session.hello.res.ready.json`
+and `session.auth.res.json`), which is what will catch anyone refactoring this apart.
+
 ## 3. Dependencies
 
 | Purpose | Crate |
