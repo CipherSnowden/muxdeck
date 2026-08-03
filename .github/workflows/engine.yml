@@ -52,3 +52,14 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
+
+      # The uinput tests are #[ignore]d because they need write access to /dev/uinput, which no
+      # ordinary machine grants. A Linux runner can, and this is the only automated proof that
+      # the Linux backend emits the right key codes in the right order rather than merely
+      # compiling. Chmod rather than `usermod -aG input`, which needs a fresh login to take.
+      - name: Test uinput injection
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo modprobe uinput
+          sudo chmod 0666 /dev/uinput
+          cargo test -p muxdeck-input -- --ignored --test-threads=1

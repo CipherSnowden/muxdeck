@@ -15,6 +15,8 @@ use muxdeck_core::{Key, MediaCommand, MouseButton};
 use thiserror::Error;
 
 pub mod keymap;
+pub mod linux;
+pub mod macos;
 mod null;
 
 #[cfg(windows)]
@@ -121,18 +123,27 @@ pub trait InputBackend: Send + Sync {
 
 /// The backend for this platform.
 ///
-/// Returns [`NullBackend`] where no implementation exists yet, so the engine still builds and
+/// Returns [`NullBackend`] on a target with no implementation, so the engine still builds and
 /// runs everywhere — `preflight` then fails with a message saying exactly that, rather than
-/// the daemon refusing to start.
+/// the daemon refusing to start. Windows, macOS and Linux all have real backends; the fallback
+/// exists for the BSDs and anything else someone points a compiler at.
 pub fn platform_backend() -> Box<dyn InputBackend> {
     #[cfg(windows)]
     {
         Box::new(windows::WindowsBackend::new())
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        Box::new(macos::MacosBackend::new())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Box::new(linux::LinuxBackend::new())
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         Box::new(NullBackend::new(
-            "input injection for this platform arrives in milestone M7",
+            "MuxDeck has no input backend for this operating system",
         ))
     }
 }

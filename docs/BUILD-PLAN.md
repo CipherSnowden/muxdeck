@@ -580,7 +580,7 @@ last leg is untested.
 
 ---
 
-## [ ] M7 — macOS and Linux input backends
+## [x] M7 — macOS and Linux input backends
 
 Needs CI or real machines. Do the platform you have access to first.
 
@@ -598,6 +598,48 @@ Needs CI or real machines. Do the platform you have access to first.
 > writable. Ship the udev rule and wire it into `service install`.
 >
 > Extend the CI matrix to build and test all three platforms.
+
+**Done — with one honest asterisk.**
+
+| | Compiles | Injects |
+| --- | :---: | :---: |
+| Windows | CI + local | verified in M3 |
+| Linux | CI | **verified** — events read back off the device |
+| macOS | CI | **never observed** |
+
+- **macOS has never injected a keystroke.** There is no Mac on the development machine and a CI
+  runner has no desktop session, so `macos/backend.rs` is written against Apple's documentation
+  and proved only to compile. Its module comment says so too. The first Mac user to press a
+  button is the first real test; start with the `NSSystemDefined` media path, which is the part
+  most likely to be wrong.
+- **Linux is genuinely verified, not merely compiled.** The test creates a real uinput device,
+  injects `CONTROL+A`, and reads the events back to assert `(CTRL,1) (A,1) (A,0) (CTRL,0)` — the
+  modifier pressed first and released last. Two things had to be got right for that to work at
+  all: the events come out of the `/dev/input/event*` node the kernel creates, **not** the
+  `/dev/uinput` handle that created it (reading that one blocks for ever waiting on
+  force-feedback uploads), and the reader must be opened *before* anything is emitted, because
+  the kernel buffers per open file description.
+- **CI now runs it every time.** `engine.yml` loads the `uinput` module, chmods the node and runs
+  the `#[ignore]`d tests on `ubuntu-latest`. Without that step the proof would have been a
+  one-off on this machine.
+- **Both keymaps are plain tables that compile and test on Windows**, which is what made the
+  milestone tractable at all: only the FFI layer is platform-gated, and for Linux even that was
+  reachable through WSL. 27 of the 30 `muxdeck-input` tests run on every host.
+- **The macOS table is deliberately partial.** `key_code` returns `Option`: Apple keyboards have
+  never had Print Screen, Scroll Lock, Pause, a Menu key or F21–F24, and there is no virtual key
+  code that means any of them. Mapping Print Screen to F13 because that is where a PC keyboard
+  puts it would fire an application's F13 binding rather than take a screenshot, so the backend
+  refuses with a message instead. Same for `MEDIA_STOP` — there is no `NX_KEYTYPE_STOP`.
+- **`Key::ALL` and `MediaCommand::ALL` moved into `muxdeck-core`.** Three keymaps were about to
+  keep three copies of the same list, and a key missing from one copy is a key that silently
+  never gets tested.
+- The udev rule and `service install` wiring were already shipped in M5; verified rather than
+  rebuilt. The CI matrix already covered all three platforms from M0.
+
+Not done, and out of scope as planned: mouse support on Linux. A uinput device declares its
+capabilities at creation and this one is a keyboard; pointer control needs a second device with
+`EV_REL` axes. `capabilities.mouse` reports `false` so a deck greys those buttons out rather
+than letting them fail at press time.
 
 ---
 

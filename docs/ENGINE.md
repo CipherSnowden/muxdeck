@@ -72,8 +72,8 @@ and `session.auth.res.json`), which is what will catch anyone refactoring this a
 | CLI | `clap` (derive) |
 | system metrics | `sysinfo` |
 | Windows input | `windows` (Win32_UI_Input_KeyboardAndMouse, Win32_Foundation) |
-| macOS input | `core-graphics`, `core-foundation` |
-| Linux input | `evdev` / direct `/dev/uinput` ioctls via `nix` |
+| macOS input | `core-graphics`, plus `objc2` for `NSEvent` alone — media keys are the one thing with no Core Graphics constructor (§4.2) |
+| Linux input | `evdev` — the crate wraps the `/dev/uinput` ioctls, so the backend needs no `unsafe` of its own |
 
 Do not add `enigo` or `rdev`. They are convenient but abstract away exactly the parts we need
 control over (unicode injection, modifier ordering, media keys, scancode vs virtual-key), and
@@ -157,9 +157,17 @@ Create a virtual device via `/dev/uinput`.
 - Emit `EV_SYN`/`SYN_REPORT` after each event batch or nothing is delivered.
 - Register the full key range at device creation time (`UI_SET_KEYBIT` for every keycode you
   may ever send), including `KEY_PLAYPAUSE`, `KEY_VOLUMEUP`, etc.
-- Unicode text injection has no clean uinput path. Implement `input.text` by mapping to the
-  active layout where possible, and return `INJECTION_FAILED` with a clear message for
-  characters that cannot be produced. Document this as a known Linux limitation.
+- Unicode text injection has no clean uinput path, and `input.text` therefore **refuses
+  outright** rather than half-working. uinput speaks key codes, not characters: what a code
+  produces depends on the layout the compositor has loaded, which a daemon cannot read on
+  Wayland at all. A partial mapping would be an ASCII/US-layout table that silently types the
+  wrong characters on AZERTY or Dvorak — worse than an error, because it looks like it worked.
+  `capabilities.text_unicode` reports `false` so a deck greys those buttons out in advance
+  (`docs/PROTOCOL.md` §4.1), and the error names a key combination as the alternative. This is
+  the known Linux limitation.
+- Mouse control is likewise unsupported. A uinput device declares its capabilities at creation
+  and this one is a keyboard; a pointer needs a second device with `EV_REL` axes and button
+  bits. `capabilities.mouse` reports `false`.
 
 ## 5. `muxdeck-engine` — modules
 

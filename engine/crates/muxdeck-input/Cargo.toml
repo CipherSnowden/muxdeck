@@ -15,9 +15,17 @@ thiserror = "2.0.19"
 [target."cfg(windows)".dependencies]
 windows = { version = "0.62.2", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_Foundation"] }
 
-# Platform backends land in M3 (Windows) and M7 (macOS, Linux). Their dependencies are
-# listed in docs/ENGINE.md §3 and go behind [target.'cfg(target_os = "...")'.dependencies]
-# so a Linux build never pulls the Windows crate.
+[target.'cfg(target_os = "linux")'.dependencies]
+evdev = "0.13.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.25.0"
+# For NSEvent alone. Media keys are the one thing on macOS with no Core Graphics constructor,
+# so the backend has to build an NSSystemDefined event through the Objective-C runtime.
+objc2 = "0.6.4"
+
+# Each platform's dependencies sit behind [target.'cfg(target_os = "...")'.dependencies], so a
+# Linux build never pulls the Windows crate. Listed in docs/ENGINE.md §3.
 
 [features]
 # Exposes `mock::MockBackend` to other crates' test suites. Never enabled by a normal build.
